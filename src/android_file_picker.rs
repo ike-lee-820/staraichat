@@ -1,30 +1,25 @@
 use anyhow::{Context, Result};
 use jni::objects::JString;
-use jni::signature::JavaType;
 use jni::JavaVM;
 use std::sync::{Arc, Mutex, OnceLock};
 
-static APP_VM: OnceLock<*mut jni::sys::JavaVM> = OnceLock::new();
-static PICK_RESULT: OnceLock<Arc<Mutex<Option<(String, String)>>>> = OnceLock::new();
-static SAVE_RESULT: OnceLock<Arc<Mutex<Option<String>>>> = OnceLock::new();
+static APP_VM: OnceLock<usize> = OnceLock::new();
 
 pub fn set_vm(vm: *mut jni::sys::JavaVM) {
-    let _ = APP_VM.set(vm);
-    let _ = PICK_RESULT.set(Arc::new(Mutex::new(None)));
-    let _ = SAVE_RESULT.set(Arc::new(Mutex::new(None)));
+    let _ = APP_VM.set(vm as usize);
 }
 
-fn attach_env() -> Result<jni::AttachGuard<'static>> {
-    let vm_ptr = APP_VM.get().context("Android VM not set")?;
-    let vm = unsafe { JavaVM::from_raw(*vm_ptr) }?;
-    Ok(vm.attach_current_thread()?)
+fn get_vm() -> Result<JavaVM> {
+    let ptr = APP_VM.get().context("Android VM not set")?;
+    unsafe { JavaVM::from_raw(*ptr as *mut jni::sys::JavaVM) }
 }
 
 fn with_env<F, T>(f: F) -> Result<T>
 where
     F: FnOnce(&mut jni::JNIEnv) -> Result<T>,
 {
-    let mut env = attach_env()?;
+    let vm = get_vm()?;
+    let mut env = vm.attach_current_thread()?;
     f(&mut env)
 }
 
