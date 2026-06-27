@@ -1,0 +1,315 @@
+name: Build Multi-Platform
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  STARAI_SECRETS_KEY: ${{ secrets.STARAI_SECRETS_KEY }}
+
+jobs:
+  # ------------------ Windows ------------------
+  build-windows:
+    name: Windows ${{ matrix.arch }}
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86
+            target: i686-pc-windows-msvc
+            msvc_arch: x86
+          - arch: x64
+            target: x86_64-pc-windows-msvc
+            msvc_arch: x64
+          - arch: arm64
+            target: aarch64-pc-windows-msvc
+            msvc_arch: amd64_arm64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Write secrets.toml
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.STARAI_GITHUB_TOKEN }}
+          GH_TOKEN_FB1: ${{ secrets.STARAI_GITHUB_TOKEN_FALLBACK_1 }}
+          GH_TOKEN_FB2: ${{ secrets.STARAI_GITHUB_TOKEN_FALLBACK_2 }}
+          GH_TOKEN_FB3: ${{ secrets.STARAI_GITHUB_TOKEN_FALLBACK_3 }}
+          XUNFEI_APP_ID: ${{ secrets.STARAI_XUNFEI_APP_ID }}
+          XUNFEI_API_KEY: ${{ secrets.STARAI_XUNFEI_API_KEY }}
+          XUNFEI_API_SECRET: ${{ secrets.STARAI_XUNFEI_API_SECRET }}
+          AGNES_API_KEY: ${{ secrets.STARAI_AGNES_API_KEY }}
+        run: |
+          @"
+          github_token = `"$env:GH_TOKEN`"
+          github_token_fallback_1 = `"$env:GH_TOKEN_FB1`"
+          github_token_fallback_2 = `"$env:GH_TOKEN_FB2`"
+          github_token_fallback_3 = `"$env:GH_TOKEN_FB3`"
+          xunfei_app_id = `"$env:XUNFEI_APP_ID`"
+          xunfei_api_key = `"$env:XUNFEI_API_KEY`"
+          xunfei_api_secret = `"$env:XUNFEI_API_SECRET`"
+          agnes_api_key = `"$env:AGNES_API_KEY`"
+          "@ | Set-Content -Path secrets.toml -Encoding UTF8
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Configure MSVC for ${{ matrix.msvc_arch }}
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{ matrix.msvc_arch }}
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Build release
+        run: cargo build --target ${{ matrix.target }} --release
+
+      - name: Package artifact
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "dist/ai_chat-windows-${{ matrix.arch }}"
+          Copy-Item "target/${{ matrix.target }}/release/ai_chat.exe" "dist/ai_chat-windows-${{ matrix.arch }}/"
+          Copy-Item -Recurse -Force "fonts" "dist/ai_chat-windows-${{ matrix.arch }}/fonts"
+          Compress-Archive -Path "dist/ai_chat-windows-${{ matrix.arch }}" -DestinationPath "dist/ai_chat-windows-${{ matrix.arch }}.zip"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai_chat-windows-${{ matrix.arch }}
+          path: dist/ai_chat-windows-${{ matrix.arch }}.zip
+
+  # ------------------ Linux (native + cross) ------------------
+  build-linux:
+    name: Linux ${{ matrix.arch }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x32
+            target: i686-unknown-linux-gnu
+            cross: true
+          - arch: x64
+            target: x86_64-unknown-linux-gnu
+            cross: false
+          - arch: arm32
+            target: armv7-unknown-linux-gnueabihf
+            cross: true
+          - arch: arm64
+            target: aarch64-unknown-linux-gnu
+            cross: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Write secrets.toml
+        env:
+          GH_TOKEN: ${{ secrets.STARAI_GITHUB_TOKEN }}
+          GH_TOKEN_FB1: ${{ secrets.STARAI_GITHUB_TOKEN_FALLBACK_1 }}
+          GH_TOKEN_FB2: ${{ secrets.STARAI_GITHUB_TOKEN_FALLBACK_2 }}
+          GH_TOKEN_FB3: ${{ secrets.STARAI_GITHUB_TOKEN_FALLBACK_3 }}
+          XUNFEI_APP_ID: ${{ secrets.STARAI_XUNFEI_APP_ID }}
+          XUNFEI_API_KEY: ${{ secrets.STARAI_XUNFEI_API_KEY }}
+          XUNFEI_API_SECRET: ${{ secrets.STARAI_XUNFEI_API_SECRET }}
+          AGNES_API_KEY: ${{ secrets.STARAI_AGNES_API_KEY }}
+        run: |
+          cat > secrets.toml <<EOF
+          github_token = "$GH_TOKEN"
+          github_token_fallback_1 = "$GH_TOKEN_FB1"
+          github_token_fallback_2 = "$GH_TOKEN_FB2"
+          github_token_fallback_3 = "$GH_TOKEN_FB3"
+          xunfei_app_id = "$XUNFEI_APP_ID"
+          xunfei_api_key = "$XUNFEI_API_KEY"
+          xunfei_api_secret = "$XUNFEI_API_SECRET"
+          agnes_api_key = "$AGNES_API_KEY"
+          EOF
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install cross
+        if: matrix.cross
+        run: cargo install cross --git https://github.com/cross-rs/cross
+
+      - name: Install native dependencies
+        if: ${{ !matrix.cross }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libssl-dev pkg-config libx11-dev libxcursor-dev libxrandr-dev libxi-dev libgl1-mesa-dev libxkbcommon-dev libwayland-dev libasound2-dev
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Build release
+        run: |
+          if [ "${{ matrix.cross }}" = "true" ]; then
+            cross build --target ${{ matrix.target }} --release
+          else
+            cargo build --target ${{ matrix.target }} --release
+          fi
+
+      - name: Package artifact
+        run: |
+          mkdir -p dist/ai_chat-linux-${{ matrix.arch }}
+          cp target/${{ matrix.target }}/release/ai_chat dist/ai_chat-linux-${{ matrix.arch }}/
+          cp -r fonts dist/ai_chat-linux-${{ matrix.arch }}/fonts
+          cd dist && tar czf ai_chat-linux-${{ matrix.arch }}.tar.gz ai_chat-linux-${{ matrix.arch }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai_chat-linux-${{ matrix.arch }}
+          path: dist/ai_chat-linux-${{ matrix.arch }}.tar.gz
+
+  # ------------------ macOS ------------------
+  build-macos:
+    name: macOS ${{ matrix.arch }}
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            target: x86_64-apple-darwin
+          - arch: arm64
+            target: aarch64-apple-darwin
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Write secrets.toml
+        env:
+          GH_TOKEN: ${{ secrets.STARAI_GITHUB_TOKEN }}
+          GH_TOKEN_FB1: ${{ secrets.STARAI_GITHUB_TOKEN_FALLBACK_1 }}
+          GH_TOKEN_FB2: ${{ secrets.STARAI_GITHUB_TOKEN_FALLBACK_2 }}
+          GH_TOKEN_FB3: ${{ secrets.STARAI_GITHUB_TOKEN_FALLBACK_3 }}
+          XUNFEI_APP_ID: ${{ secrets.STARAI_XUNFEI_APP_ID }}
+          XUNFEI_API_KEY: ${{ secrets.STARAI_XUNFEI_API_KEY }}
+          XUNFEI_API_SECRET: ${{ secrets.STARAI_XUNFEI_API_SECRET }}
+          AGNES_API_KEY: ${{ secrets.STARAI_AGNES_API_KEY }}
+        run: |
+          cat > secrets.toml <<EOF
+          github_token = "$GH_TOKEN"
+          github_token_fallback_1 = "$GH_TOKEN_FB1"
+          github_token_fallback_2 = "$GH_TOKEN_FB2"
+          github_token_fallback_3 = "$GH_TOKEN_FB3"
+          xunfei_app_id = "$XUNFEI_APP_ID"
+          xunfei_api_key = "$XUNFEI_API_KEY"
+          xunfei_api_secret = "$XUNFEI_API_SECRET"
+          agnes_api_key = "$AGNES_API_KEY"
+          EOF
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Build release
+        run: cargo build --target ${{ matrix.target }} --release
+
+      - name: Package artifact
+        run: |
+          mkdir -p dist/ai_chat-macos-${{ matrix.arch }}
+          cp target/${{ matrix.target }}/release/ai_chat dist/ai_chat-macos-${{ matrix.arch }}/
+          cp -r fonts dist/ai_chat-macos-${{ matrix.arch }}/fonts
+          cd dist && tar czf ai_chat-macos-${{ matrix.arch }}.tar.gz ai_chat-macos-${{ matrix.arch }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai_chat-macos-${{ matrix.arch }}
+          path: dist/ai_chat-macos-${{ matrix.arch }}.tar.gz
+
+  # ------------------ Android (signed APK) ------------------
+  build-android:
+    name: Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Write secrets.toml
+        env:
+          GH_TOKEN: ${{ secrets.STARAI_GITHUB_TOKEN }}
+          GH_TOKEN_FB1: ${{ secrets.STARAI_GITHUB_TOKEN_FALLBACK_1 }}
+          GH_TOKEN_FB2: ${{ secrets.STARAI_GITHUB_TOKEN_FALLBACK_2 }}
+          GH_TOKEN_FB3: ${{ secrets.STARAI_GITHUB_TOKEN_FALLBACK_3 }}
+          XUNFEI_APP_ID: ${{ secrets.STARAI_XUNFEI_APP_ID }}
+          XUNFEI_API_KEY: ${{ secrets.STARAI_XUNFEI_API_KEY }}
+          XUNFEI_API_SECRET: ${{ secrets.STARAI_XUNFEI_API_SECRET }}
+          AGNES_API_KEY: ${{ secrets.STARAI_AGNES_API_KEY }}
+        run: |
+          cat > secrets.toml <<EOF
+          github_token = "$GH_TOKEN"
+          github_token_fallback_1 = "$GH_TOKEN_FB1"
+          github_token_fallback_2 = "$GH_TOKEN_FB2"
+          github_token_fallback_3 = "$GH_TOKEN_FB3"
+          xunfei_app_id = "$XUNFEI_APP_ID"
+          xunfei_api_key = "$XUNFEI_API_KEY"
+          xunfei_api_secret = "$XUNFEI_API_SECRET"
+          agnes_api_key = "$AGNES_API_KEY"
+          EOF
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: i686-linux-android,armv7-linux-androideabi,aarch64-linux-android,x86_64-linux-android
+
+      - name: Setup Android NDK
+        uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r26c
+          add-to-path: true
+
+      - name: Install Android SDK platform
+        run: |
+          export ANDROID_HOME=/usr/local/lib/android/sdk
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-21" "build-tools;29.0.3" || true
+
+      - name: Install cargo-apk
+        run: cargo install cargo-apk
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: android-apk
+
+      - name: Decode signing keystore
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > android-release.keystore
+          fi
+
+      - name: Build signed APK
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+          ANDROID_HOME: /usr/local/lib/android/sdk
+          ANDROID_KEYSTORE: ${{ github.workspace }}/android-release.keystore
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: cargo apk build --release
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai_chat-android-apk
+          path: target/release/apk/*.apk
