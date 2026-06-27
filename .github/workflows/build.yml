@@ -305,11 +305,28 @@ jobs:
             echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > android-release.keystore
           fi
 
+      - name: Inject keystore password into Cargo.toml
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          python3 - <<'PY'
+          import re, os
+          pwd = os.environ['ANDROID_KEYSTORE_PASSWORD']
+          with open('Cargo.toml', 'r', encoding='utf-8') as f:
+              text = f.read()
+          text = re.sub(
+              r'(\[package\.metadata\.android\.signing\.release\]\n)',
+              r'\1keystore_password = "' + pwd + '"\n',
+              text
+          )
+          with open('Cargo.toml', 'w', encoding='utf-8') as f:
+              f.write(text)
+          PY
+
       - name: Build APK with cargo-apk
         env:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
           ANDROID_HOME: /usr/local/lib/android/sdk
-          CARGO_APK_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: cargo apk build --release
 
       - name: Compile Java Activity and inject DEX
