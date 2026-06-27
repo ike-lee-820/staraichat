@@ -283,7 +283,14 @@ jobs:
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-21" "build-tools;29.0.3" || true
 
       - name: Install cargo-apk
-        run: cargo install cargo-apk
+        run: |
+          for i in 1 2 3; do
+            echo "Attempt $i to install cargo-apk..."
+            cargo install cargo-apk --version 0.10.0 --locked && exit 0
+            sleep 30
+          done
+          echo "cargo-apk installation failed after 3 attempts"
+          exit 1
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
