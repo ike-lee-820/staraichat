@@ -1059,36 +1059,6 @@ impl App {
                 });
         }
 
-        CentralPanel::default().show(ctx, |ui| {
-            ui.with_layout(egui::Layout::top_down(egui::Align::Min), |ui| {
-                if let Some(error) = &self.error {
-                    ui.colored_label(egui::Color32::RED, format!("错误: {}", error));
-                    ui.add_space(8.0);
-                }
-
-                if let Some(conv) = self.selected_conversation() {
-                    let conv_clone = conv.clone();
-                    if kind != ConversationKind::Chat {
-                        self.render_generation_settings(ui, kind);
-                    }
-                    self.render_conversation_header(ui, &conv_clone, kind);
-                    #[cfg(feature = "webview")]
-                    {
-                        let (_id, rect) = ui.allocate_space(ui.available_size());
-                        self.message_area_rect = Some(rect);
-                    }
-                    #[cfg(not(feature = "webview"))]
-                    {
-                        self.render_messages(ctx, ui, &conv_clone);
-                    }
-                } else {
-                    ui.centered_and_justified(|ui| {
-                        ui.label("请选择或创建一个对话");
-                    });
-                }
-            });
-        });
-
         let input_margin = if narrow {
             egui::Margin::symmetric(6.0, 6.0)
         } else {
@@ -1182,6 +1152,36 @@ impl App {
                     }
                 }
             });
+
+        CentralPanel::default().show(ctx, |ui| {
+            ui.with_layout(egui::Layout::top_down(egui::Align::Min), |ui| {
+                if let Some(error) = &self.error {
+                    ui.colored_label(egui::Color32::RED, format!("错误: {}", error));
+                    ui.add_space(8.0);
+                }
+
+                if let Some(conv) = self.selected_conversation() {
+                    let conv_clone = conv.clone();
+                    if kind != ConversationKind::Chat {
+                        self.render_generation_settings(ui, kind);
+                    }
+                    self.render_conversation_header(ui, &conv_clone, kind);
+                    #[cfg(feature = "webview")]
+                    {
+                        let (_id, rect) = ui.allocate_space(ui.available_size());
+                        self.message_area_rect = Some(rect);
+                    }
+                    #[cfg(not(feature = "webview"))]
+                    {
+                        self.render_messages(ctx, ui, &conv_clone);
+                    }
+                } else {
+                    ui.centered_and_justified(|ui| {
+                        ui.label("请选择或创建一个对话");
+                    });
+                }
+            });
+        });
 
         if let Some(id) = self.to_delete.take() {
             self.delete_conversation(&id);
@@ -1600,13 +1600,14 @@ impl App {
                                             egui::Frame::group(ui.style())
                                                 .fill(egui::Color32::from_rgb(245, 245, 245))
                                                 .show(ui, |ui| {
-                                                    egui::Label::new(
-                                                        RichText::new(think)
-                                                            .color(egui::Color32::DARK_GRAY)
-                                                            .monospace(),
-                                                    )
-                                                    .wrap()
-                                                    .ui(ui);
+                                                    ui.add(
+                                                        egui::Label::new(
+                                                            RichText::new(think)
+                                                                .color(egui::Color32::DARK_GRAY)
+                                                                .monospace(),
+                                                        )
+                                                        .wrap(),
+                                                    );
                                                 });
                                         });
                                     ui.add_space(6.0);
