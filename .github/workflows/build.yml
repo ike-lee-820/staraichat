@@ -280,15 +280,7 @@ jobs:
       - name: Install Android SDK platform
         run: |
           export ANDROID_HOME=/usr/local/lib/android/sdk
-          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-21" "build-tools;29.0.3" || true
-
-      - name: Compile Java Activity
-        run: |
-          export ANDROID_HOME=/usr/local/lib/android/sdk
-          mkdir -p android/build
-          javac -d android/build \
-            -cp "$ANDROID_HOME/platforms/android-21/android.jar" \
-            android/src/cc/ccwu/staraichat/StarAIChatActivity.java
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-33" "build-tools;33.0.0" || true
 
       - name: Install cargo-apk
         run: |
@@ -313,15 +305,45 @@ jobs:
             echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > android-release.keystore
           fi
 
-      - name: Build signed APK
+      - name: Build unsigned APK
         env:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
           ANDROID_HOME: /usr/local/lib/android/sdk
-          CARGO_APK_RELEASE_KEYSTORE: ${{ github.workspace }}/android-release.keystore
-          CARGO_APK_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: cargo apk build --release
+
+      - name: Compile Java Activity and inject DEX
+        env:
+          ANDROID_HOME: /usr/local/lib/android/sdk
         run: |
-          cargo apk build --release
-          # cargo-apk 默认不会自动包含额外编译的 class，如需手动合并请检查输出
+          mkdir -p android/build
+          javac -d android/build \
+            -cp "$ANDROID_HOME/platforms/android-33/android.jar" \
+            android/src/cc/ccwu/staraichat/StarAIChatActivity.java
+          $ANDROID_HOME/build-tools/33.0.0/d8 \
+            android/build/cc/ccwu/staraichat/StarAIChatActivity.class \
+            --output android/build/
+          APK=$(find target/release/apk -name "*.apk" | head -1)
+          rm -rf apk_extracted
+          unzip -o "$APK" -d apk_extracted
+          cp android/build/classes.dex apk_extracted/
+          cd apk_extracted
+          zip -r ../unsigned_with_dex.apk . -x 'META-INF/*'
+          cd ..
+
+      - name: Align and sign APK
+        env:
+          ANDROID_HOME: /usr/local/lib/android/sdk
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          $ANDROID_HOME/build-tools/33.0.0/zipalign -f -p 4 unsigned_with_dex.apk aligned.apk
+          $ANDROID_HOME/build-tools/33.0.0/apksigner sign \
+            --ks android-release.keystore \
+            --ks-key-alias staraichat \
+            --ks-pass pass:"$ANDROID_KEYSTORE_PASSWORD" \
+            --key-pass pass:"$ANDROID_KEYSTORE_PASSWORD" \
+            aligned.apk
+          APK=$(find target/release/apk -name "*.apk" | head -1)
+          cp aligned.apk "$APK"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4

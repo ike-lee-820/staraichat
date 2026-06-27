@@ -2,6 +2,8 @@ use anyhow::{Context, Result};
 use jni::objects::JString;
 use jni::JavaVM;
 use std::sync::OnceLock;
+use std::thread;
+use std::time::Duration;
 
 static APP_VM: OnceLock<usize> = OnceLock::new();
 
@@ -23,7 +25,7 @@ where
     f(&mut env)
 }
 
-pub fn pick_file() -> Result<Option<(String, String)>> {
+fn start_pick_file() -> Result<()> {
     with_env(|env| {
         let cls = env.find_class("cc/ccwu/staraichat/StarAIChatActivity")?;
         let activity = env
@@ -34,49 +36,12 @@ pub fn pick_file() -> Result<Option<(String, String)>> {
                 &[],
             )?
             .l()?;
-
-        env.call_method(
-            &activity,
-            "startPickFile",
-            "()V",
-            &[],
-        )?;
-
-        for _ in 0..300 {
-            let done = env
-                .call_method(
-                    &activity,
-                    "isPickDone",
-                    "()Z",
-                    &[],
-                )?
-                .z()?;
-            if done {
-                let result: JString = env
-                    .call_method(
-                        &activity,
-                        "getPickResult",
-                        "()Ljava/lang/String;",
-                        &[],
-                    )?
-                    .l()?
-                    .into();
-                let s: String = env.get_string(&result)?.into();
-                if s.is_empty() {
-                    return Ok(None);
-                }
-                let mut parts = s.splitn(2, '\n');
-                let path = parts.next().unwrap_or("").to_string();
-                let name = parts.next().unwrap_or("").to_string();
-                return Ok(Some((name, path)));
-            }
-            std::thread::sleep(std::time::Duration::from_millis(100));
-        }
-        anyhow::bail!("pick file timeout")
+        env.call_method(&activity, "startPickFile", "()V", &[])?;
+        Ok(())
     })
 }
 
-pub fn save_file(default_name: &str) -> Result<Option<String>> {
+fn start_save_file(default_name: &str) -> Result<()> {
     with_env(|env| {
         let cls = env.find_class("cc/ccwu/staraichat/StarAIChatActivity")?;
         let activity = env
@@ -87,43 +52,136 @@ pub fn save_file(default_name: &str) -> Result<Option<String>> {
                 &[],
             )?
             .l()?;
-
         env.call_method(
             &activity,
             "startSaveFile",
             "(Ljava/lang/String;)V",
             &[(&env.new_string(default_name)?).into()],
         )?;
+        Ok(())
+    })
+}
 
+fn is_pick_done() -> Result<bool> {
+    with_env(|env| {
+        let cls = env.find_class("cc/ccwu/staraichat/StarAIChatActivity")?;
+        let activity = env
+            .call_static_method(
+                &cls,
+                "getInstance",
+                "()Lcc/ccwu/staraichat/StarAIChatActivity;",
+                &[],
+            )?
+            .l()?;
+        let done = env.call_method(&activity, "isPickDone", "()Z", &[])?.z()?;
+        Ok(done)
+    })
+}
+
+fn get_pick_result() -> Result<Option<(String, String)>> {
+    with_env(|env| {
+        let cls = env.find_class("cc/ccwu/staraichat/StarAIChatActivity")?;
+        let activity = env
+            .call_static_method(
+                &cls,
+                "getInstance",
+                "()Lcc/ccwu/staraichat/StarAIChatActivity;",
+                &[],
+            )?
+            .l()?;
+        let result: JString = env
+            .call_method(
+                &activity,
+                "getPickResult",
+                "()Ljava/lang/String;",
+                &[],
+            )?
+            .l()?
+            .into();
+        let s: String = env.get_string(&result)?.into();
+        if s.is_empty() {
+            return Ok(None);
+        }
+        let mut parts = s.splitn(2, '\n');
+        let path = parts.next().unwrap_or("").to_string();
+        let name = parts.next().unwrap_or("").to_string();
+        Ok(Some((name, path)))
+    })
+}
+
+fn is_save_done() -> Result<bool> {
+    with_env(|env| {
+        let cls = env.find_class("cc/ccwu/staraichat/StarAIChatActivity")?;
+        let activity = env
+            .call_static_method(
+                &cls,
+                "getInstance",
+                "()Lcc/ccwu/staraichat/StarAIChatActivity;",
+                &[],
+            )?
+            .l()?;
+        let done = env.call_method(&activity, "isSaveDone", "()Z", &[])?.z()?;
+        Ok(done)
+    })
+}
+
+fn get_save_result() -> Result<Option<String>> {
+    with_env(|env| {
+        let cls = env.find_class("cc/ccwu/staraichat/StarAIChatActivity")?;
+        let activity = env
+            .call_static_method(
+                &cls,
+                "getInstance",
+                "()Lcc/ccwu/staraichat/StarAIChatActivity;",
+                &[],
+            )?
+            .l()?;
+        let result: JString = env
+            .call_method(
+                &activity,
+                "getSaveResult",
+                "()Ljava/lang/String;",
+                &[],
+            )?
+            .l()?
+            .into();
+        let s: String = env.get_string(&result)?.into();
+        Ok(if s.is_empty() { None } else { Some(s) })
+    })
+}
+
+pub fn pick_file() -> Result<Option<(String, String)>> {
+    start_pick_file()?;
+    let result = thread::spawn(|| {
         for _ in 0..300 {
-            let done = env
-                .call_method(
-                    &activity,
-                    "isSaveDone",
-                    "()Z",
-                    &[],
-                )?
-                .z()?;
-            if done {
-                let result: JString = env
-                    .call_method(
-                        &activity,
-                        "getSaveResult",
-                        "()Ljava/lang/String;",
-                        &[],
-                    )?
-                    .l()?
-                    .into();
-                let s: String = env.get_string(&result)?.into();
-                if s.is_empty() {
-                    return Ok(None);
-                }
-                return Ok(Some(s));
+            match is_pick_done() {
+                Ok(true) => return get_pick_result(),
+                Ok(false) => thread::sleep(Duration::from_millis(100)),
+                Err(e) => return Err(e),
             }
-            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        anyhow::bail!("pick file timeout")
+    })
+    .join()
+    .map_err(|_| anyhow::anyhow!("pick file thread panicked"))?;
+    result
+}
+
+pub fn save_file(default_name: &str) -> Result<Option<String>> {
+    start_save_file(default_name)?;
+    let result = thread::spawn(|| {
+        for _ in 0..300 {
+            match is_save_done() {
+                Ok(true) => return get_save_result(),
+                Ok(false) => thread::sleep(Duration::from_millis(100)),
+                Err(e) => return Err(e),
+            }
         }
         anyhow::bail!("save file timeout")
     })
+    .join()
+    .map_err(|_| anyhow::anyhow!("save file thread panicked"))?;
+    result
 }
 
 pub fn write_uri(uri: &str, data: &[u8]) -> Result<()> {
@@ -172,12 +230,7 @@ pub fn write_uri(uri: &str, data: &[u8]) -> Result<()> {
             let end = (offset + chunk_size).min(data.len());
             let chunk = &data[offset..end];
             let arr = env.byte_array_from_slice(chunk)?;
-            env.call_method(
-                &output,
-                "write",
-                "([B)V",
-                &[(&arr).into()],
-            )?;
+            env.call_method(&output, "write", "([B)V", &[(&arr).into()])?;
             offset = end;
         }
 

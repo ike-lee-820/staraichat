@@ -2,7 +2,6 @@ package cc.ccwu.staraichat;
 
 import android.app.Activity;
 import android.app.NativeActivity;
-import android.content.ContentResolver;
 import android.content.Intent;
 import android.database.Cursor;
 import android.net.Uri;
@@ -12,30 +11,34 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.lang.ref.WeakReference;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 public class StarAIChatActivity extends NativeActivity {
     private static final int REQUEST_OPEN_DOCUMENT = 1001;
     private static final int REQUEST_CREATE_DOCUMENT = 1002;
 
-    private static StarAIChatActivity sInstance;
-    private volatile String mPickResult;
-    private volatile String mSaveResult;
-    private volatile boolean mPickDone;
-    private volatile boolean mSaveDone;
+    private static WeakReference<StarAIChatActivity> sInstanceRef = new WeakReference<>(null);
+
+    private final AtomicReference<String> mPickResult = new AtomicReference<>(null);
+    private final AtomicReference<String> mSaveResult = new AtomicReference<>(null);
+    private final AtomicBoolean mPickDone = new AtomicBoolean(false);
+    private final AtomicBoolean mSaveDone = new AtomicBoolean(false);
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        sInstance = this;
+        sInstanceRef = new WeakReference<>(this);
     }
 
     public static StarAIChatActivity getInstance() {
-        return sInstance;
+        return sInstanceRef.get();
     }
 
     public void startPickFile() {
-        mPickDone = false;
-        mPickResult = null;
+        mPickResult.set(null);
+        mPickDone.set(false);
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
         intent.setType("*/*");
@@ -43,8 +46,8 @@ public class StarAIChatActivity extends NativeActivity {
     }
 
     public void startSaveFile(String defaultName) {
-        mSaveDone = false;
-        mSaveResult = null;
+        mSaveResult.set(null);
+        mSaveDone.set(false);
         Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
         intent.setType("application/octet-stream");
@@ -53,72 +56,92 @@ public class StarAIChatActivity extends NativeActivity {
     }
 
     public boolean isPickDone() {
-        return mPickDone;
+        return mPickDone.get();
     }
 
     public String getPickResult() {
-        return mPickResult;
+        return mPickResult.get();
     }
 
     public boolean isSaveDone() {
-        return mSaveDone;
+        return mSaveDone.get();
     }
 
     public String getSaveResult() {
-        return mSaveResult;
+        return mSaveResult.get();
     }
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQUEST_OPEN_DOCUMENT) {
+            handlePickResult(resultCode, data);
+        } else if (requestCode == REQUEST_CREATE_DOCUMENT) {
+            handleSaveResult(resultCode, data);
+        }
+    }
+
+    private void handlePickResult(int resultCode, Intent data) {
         if (resultCode != Activity.RESULT_OK || data == null) {
-            if (requestCode == REQUEST_OPEN_DOCUMENT) {
-                mPickDone = true;
-            } else if (requestCode == REQUEST_CREATE_DOCUMENT) {
-                mSaveDone = true;
-            }
+            mPickResult.set("");
+            mPickDone.set(true);
             return;
         }
         Uri uri = data.getData();
         if (uri == null) {
-            if (requestCode == REQUEST_OPEN_DOCUMENT) {
-                mPickDone = true;
-            } else if (requestCode == REQUEST_CREATE_DOCUMENT) {
-                mSaveDone = true;
-            }
+            mPickResult.set("");
+            mPickDone.set(true);
             return;
         }
-        if (requestCode == REQUEST_OPEN_DOCUMENT) {
-            mPickResult = copyUriToCache(uri) + "\n" + queryDisplayName(uri);
-            mPickDone = true;
-        } else if (requestCode == REQUEST_CREATE_DOCUMENT) {
-            mSaveResult = uri.toString();
-            mSaveDone = true;
+        new Thread(() -> {
+            String path = copyUriToCache(uri);
+            String name = queryDisplayName(uri);
+            mPickResult.set(path + "\n" + name);
+            mPickDone.set(true);
+        }).start();
+    }
+
+    private void handleSaveResult(int resultCode, Intent data) {
+        if (resultCode != Activity.RESULT_OK || data == null) {
+            mSaveResult.set("");
+            mSaveDone.set(true);
+            return;
         }
+        Uri uri = data.getData();
+        if (uri == null) {
+            mSaveResult.set("");
+            mSaveDone.set(true);
+            return;
+        }
+        mSaveResult.set(uri.toString());
+        mSaveDone.set(true);
     }
 
     private String copyUriToCache(Uri uri) {
+        File outFile = null;
         try {
-            ContentResolver resolver = getContentResolver();
-            InputStream in = resolver.openInputStream(uri);
-            if (in == null) return "";
             File cacheDir = getCacheDir();
             String displayName = queryDisplayName(uri);
             String ext = "";
             int dot = displayName.lastIndexOf('.');
             if (dot > 0) ext = displayName.substring(dot);
             String random = Long.toHexString(System.currentTimeMillis());
-            File outFile = new File(cacheDir, "picker_" + random + ext);
-            OutputStream out = new FileOutputStream(outFile);
-            byte[] buf = new byte[8192];
-            int n;
-            while ((n = in.read(buf)) > 0) {
-                out.write(buf, 0, n);
+            outFile = new File(cacheDir, "picker_" + random + ext);
+
+            try (InputStream in = getContentResolver().openInputStream(uri);
+                 OutputStream out = new FileOutputStream(outFile)) {
+                if (in == null) return "";
+                byte[] buf = new byte[8192];
+                int n;
+                while ((n = in.read(buf)) > 0) {
+                    out.write(buf, 0, n);
+                }
             }
-            in.close();
-            out.close();
             return outFile.getAbsolutePath();
         } catch (Exception e) {
+            if (outFile != null && outFile.exists()) {
+                outFile.delete();
+            }
             return "";
         }
     }

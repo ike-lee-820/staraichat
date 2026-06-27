@@ -31,10 +31,12 @@ enum Screen {
     Mode(ConversationKind),
 }
 
+#[allow(dead_code)]
 enum AsyncEvent {
     ChatReply { conv_id: String, result: Result<String> },
     Generated { conv_id: String, result: Result<Vec<Attachment>> },
     FileUploaded(PendingAttachment),
+    FileDownloaded { file_name: String, result: Result<()> },
     StreamChunk { conv_id: String, content: String },
     StreamDone { conv_id: String, result: Result<()> },
 }
@@ -231,11 +233,21 @@ impl App {
     }
     #[cfg(target_os = "android")]
     fn download_attachment(&self, att: &Attachment) {
-        if let Ok(Some(uri)) = android_file_picker::save_file(&att.file_name) {
-            if let Ok(data) = std::fs::read(&att.local_path) {
-                let _ = android_file_picker::write_uri(&uri, &data);
-            }
-        }
+        let local_path = att.local_path.clone();
+        let file_name = att.file_name.clone();
+        let tx = self.tx.clone();
+        self.runtime.spawn(async move {
+            let result: Result<()> = tokio::task::spawn_blocking(move || {
+                let uri = android_file_picker::save_file(&file_name)?
+                    .context("用户取消保存")?;
+                let data = std::fs::read(&local_path)?;
+                android_file_picker::write_uri(&uri, &data)?;
+                Ok(())
+            })
+            .await
+            .map_err(|e| anyhow::anyhow!("下载任务失败: {}", e))?;
+            let _ = tx.send(AsyncEvent::FileDownloaded { file_name, result }).await;
+        });
     }
 
     fn open_with_system(&self, path: &str) {
@@ -628,6 +640,11 @@ impl App {
                 AsyncEvent::FileUploaded(att) => {
                     self.pending_attachments.push(att);
                 }
+                AsyncEvent::FileDownloaded { file_name, result } => {
+                    if let Err(e) = result {
+                        self.error = Some(format!("下载 {} 失败: {}", file_name, e));
+                    }
+                }
                 AsyncEvent::ChatReply { conv_id, result } => {
                     self.generating_ids.remove(&conv_id);
                     if let Some(idx) = self.conversations.iter().position(|c| c.id == conv_id) {
@@ -847,8 +864,8 @@ impl App {
         }
         let tx = self.tx.clone();
         self.runtime.spawn(async move {
-            match android_file_picker::pick_file() {
-                Ok(Some((name, path))) => {
+            match tokio::task::spawn_blocking(|| android_file_picker::pick_file()).await {
+                Ok(Ok(Some((name, path)))) => {
                     let ext = std::path::Path::new(&path)
                         .extension()
                         .and_then(|s| s.to_str())
@@ -867,8 +884,9 @@ impl App {
                     };
                     let _ = tx.send(AsyncEvent::FileUploaded(attachment)).await;
                 }
-                Ok(None) => {}
-                Err(e) => eprintln!("选择文件失败: {}", e),
+                Ok(Ok(None)) => {}
+                Ok(Err(e)) => eprintln!("选择文件失败: {}", e),
+                Err(e) => eprintln!("选择文件任务失败: {}", e),
             }
         });
     }
