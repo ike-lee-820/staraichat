@@ -13,16 +13,25 @@ pub struct Secrets {
     pub agnes_api_key: String,
 }
 
+macro_rules! compile_or_env {
+    ($name:literal) => {
+        option_env!($name)
+            .map(|s| s.to_string())
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| env::var($name).unwrap_or_default())
+    };
+}
+
 fn secrets() -> Secrets {
     static SECRETS: Lazy<Secrets> = Lazy::new(|| Secrets {
-        github_token: env::var("STARAI_GITHUB_TOKEN").unwrap_or_default(),
-        github_token_fallback_1: env::var("STARAI_GITHUB_TOKEN_FALLBACK_1").unwrap_or_default(),
-        github_token_fallback_2: env::var("STARAI_GITHUB_TOKEN_FALLBACK_2").unwrap_or_default(),
-        github_token_fallback_3: env::var("STARAI_GITHUB_TOKEN_FALLBACK_3").unwrap_or_default(),
-        xunfei_app_id: env::var("STARAI_XUNFEI_APP_ID").unwrap_or_default(),
-        xunfei_api_key: env::var("STARAI_XUNFEI_API_KEY").unwrap_or_default(),
-        xunfei_api_secret: env::var("STARAI_XUNFEI_API_SECRET").unwrap_or_default(),
-        agnes_api_key: env::var("STARAI_AGNES_API_KEY").unwrap_or_default(),
+        github_token: compile_or_env!("STARAI_GITHUB_TOKEN"),
+        github_token_fallback_1: compile_or_env!("STARAI_GITHUB_TOKEN_FALLBACK_1"),
+        github_token_fallback_2: compile_or_env!("STARAI_GITHUB_TOKEN_FALLBACK_2"),
+        github_token_fallback_3: compile_or_env!("STARAI_GITHUB_TOKEN_FALLBACK_3"),
+        xunfei_app_id: compile_or_env!("STARAI_XUNFEI_APP_ID"),
+        xunfei_api_key: compile_or_env!("STARAI_XUNFEI_API_KEY"),
+        xunfei_api_secret: compile_or_env!("STARAI_XUNFEI_API_SECRET"),
+        agnes_api_key: compile_or_env!("STARAI_AGNES_API_KEY"),
     });
     SECRETS.clone()
 }
