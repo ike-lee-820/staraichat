@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use jni::objects::JString;
 use jni::JavaVM;
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::OnceLock;
 
 static APP_VM: OnceLock<usize> = OnceLock::new();
 
@@ -11,7 +11,7 @@ pub fn set_vm(vm: *mut jni::sys::JavaVM) {
 
 fn get_vm() -> Result<JavaVM> {
     let ptr = APP_VM.get().context("Android VM not set")?;
-    unsafe { JavaVM::from_raw(*ptr as *mut jni::sys::JavaVM) }
+    unsafe { Ok(JavaVM::from_raw(*ptr as *mut jni::sys::JavaVM)?) }
 }
 
 fn with_env<F, T>(f: F) -> Result<T>
