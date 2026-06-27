@@ -327,7 +327,10 @@ jobs:
         env:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
           ANDROID_HOME: /usr/local/lib/android/sdk
-        run: cargo apk build --release --no-default-features
+        run: |
+          mv src/main.rs src/main.rs.desktop
+          trap 'mv src/main.rs.desktop src/main.rs' EXIT
+          cargo apk build --release
 
       - name: Compile Java Activity and inject DEX
         env:
