@@ -144,6 +144,7 @@ jobs:
       - name: Install native dependencies
         if: ${{ !matrix.cross }}
         run: |
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list
           sudo apt-get update
           sudo apt-get install -y libssl-dev pkg-config libx11-dev libxcursor-dev libxrandr-dev libxi-dev libgl1-mesa-dev libxkbcommon-dev libwayland-dev libasound2-dev
 
