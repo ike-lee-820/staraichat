@@ -235,6 +235,7 @@ impl App {
     fn download_attachment(&self, att: &Attachment) {
         let local_path = att.local_path.clone();
         let file_name = att.file_name.clone();
+        let file_name_for_event = file_name.clone();
         let tx = self.tx.clone();
         self.runtime.spawn(async move {
             let result: Result<()> = async {
@@ -250,7 +251,7 @@ impl App {
                 .map_err(|e| anyhow::anyhow!("下载任务失败: {}", e))?
             }
             .await;
-            let _ = tx.send(AsyncEvent::FileDownloaded { file_name, result }).await;
+            let _ = tx.send(AsyncEvent::FileDownloaded { file_name: file_name_for_event, result }).await;
         });
     }
 
