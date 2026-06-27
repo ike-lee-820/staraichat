@@ -3,6 +3,15 @@ name = "ai_chat"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+default = ["desktop"]
+desktop = []
+
+[[bin]]
+name = "ai_chat"
+path = "src/main.rs"
+required-features = ["desktop"]
+
 [lib]
 crate-type = ["cdylib", "rlib"]
 
