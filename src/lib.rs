@@ -237,15 +237,19 @@ impl App {
         let file_name = att.file_name.clone();
         let tx = self.tx.clone();
         self.runtime.spawn(async move {
-            let result: Result<()> = tokio::task::spawn_blocking(move || {
-                let uri = android_file_picker::save_file(&file_name)?
-                    .context("用户取消保存")?;
-                let data = std::fs::read(&local_path)?;
-                android_file_picker::write_uri(&uri, &data)?;
-                Ok(())
-            })
-            .await
-            .map_err(|e| anyhow::anyhow!("下载任务失败: {}", e))?;
+            let result: Result<()> = async {
+                tokio::task::spawn_blocking(move || {
+                    use anyhow::Context;
+                    let uri = android_file_picker::save_file(&file_name)?
+                        .context("用户取消保存")?;
+                    let data = std::fs::read(&local_path)?;
+                    android_file_picker::write_uri(&uri, &data)?;
+                    Ok(())
+                })
+                .await
+                .map_err(|e| anyhow::anyhow!("下载任务失败: {}", e))?
+            }
+            .await;
             let _ = tx.send(AsyncEvent::FileDownloaded { file_name, result }).await;
         });
     }
