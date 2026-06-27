@@ -63,13 +63,9 @@ fn build_auth_url(_app_id: &str, api_key: &str, api_secret: &str) -> Result<Url>
     let date: DateTime<Utc> = Utc::now();
     let date_str = date.to_rfc2822();
 
-    let signature_origin = format!(
-        "host: {}\ndate: {}\nGET {} HTTP/1.1",
-        HOST, date_str, PATH
-    );
+    let signature_origin = format!("host: {}\ndate: {}\nGET {} HTTP/1.1", HOST, date_str, PATH);
 
-    let mut mac = HmacSha256::new_from_slice(api_secret.as_bytes())
-        .context("创建 HMAC 失败")?;
+    let mut mac = HmacSha256::new_from_slice(api_secret.as_bytes()).context("创建 HMAC 失败")?;
     mac.update(signature_origin.as_bytes());
     let signature = BASE64.encode(mac.finalize().into_bytes());
 
@@ -79,8 +75,8 @@ fn build_auth_url(_app_id: &str, api_key: &str, api_secret: &str) -> Result<Url>
     );
     let authorization = BASE64.encode(authorization_origin.as_bytes());
 
-    let mut url = Url::parse(&format!("wss://{}{}", HOST, PATH))
-        .context("解析 WebSocket URL 失败")?;
+    let mut url =
+        Url::parse(&format!("wss://{}{}", HOST, PATH)).context("解析 WebSocket URL 失败")?;
     url.query_pairs_mut()
         .append_pair("authorization", &authorization)
         .append_pair("date", &date_str)

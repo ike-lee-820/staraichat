@@ -16,7 +16,6 @@ impl ConversationKind {
             ConversationKind::Video => "视频生成",
         }
     }
-
 }
 
 impl Default for ConversationKind {

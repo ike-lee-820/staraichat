@@ -12,16 +12,14 @@ impl Storage {
     pub fn new(dir: impl AsRef<Path>, media_dir: impl AsRef<Path>) -> Result<Self> {
         let dir = dir.as_ref().to_path_buf();
         let media_dir = media_dir.as_ref().to_path_buf();
-        fs::create_dir_all(&dir)
-            .with_context(|| format!("无法创建存储目录: {}", dir.display()))?;
+        fs::create_dir_all(&dir).with_context(|| format!("无法创建存储目录: {}", dir.display()))?;
         fs::create_dir_all(&media_dir)
             .with_context(|| format!("无法创建媒体目录: {}", media_dir.display()))?;
         Ok(Self { dir, media_dir })
     }
 
     pub fn default_dirs() -> Result<(PathBuf, PathBuf)> {
-        let data_dir = dirs::data_local_dir()
-            .context("无法获取本地数据目录")?;
+        let data_dir = dirs::data_local_dir().context("无法获取本地数据目录")?;
         let base = data_dir.join("ai_chat");
         Ok((base.join("conversations"), base.join("media")))
     }
@@ -54,18 +52,15 @@ impl Storage {
 
     pub fn save(&self, conv: &Conversation) -> Result<()> {
         let path = self.dir.join(format!("{}.json", conv.id));
-        let content = serde_json::to_string_pretty(conv)
-            .context("序列化对话失败")?;
-        fs::write(&path, content)
-            .with_context(|| format!("无法写入文件: {}", path.display()))?;
+        let content = serde_json::to_string_pretty(conv).context("序列化对话失败")?;
+        fs::write(&path, content).with_context(|| format!("无法写入文件: {}", path.display()))?;
         Ok(())
     }
 
     pub fn delete(&self, id: &str) -> Result<()> {
         let path = self.dir.join(format!("{}.json", id));
         if path.exists() {
-            fs::remove_file(&path)
-                .with_context(|| format!("无法删除文件: {}", path.display()))?;
+            fs::remove_file(&path).with_context(|| format!("无法删除文件: {}", path.display()))?;
         }
         let media = self.conversation_media_dir(id);
         if media.exists() {

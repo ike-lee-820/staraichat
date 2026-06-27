@@ -72,8 +72,7 @@ struct StreamChunkResponse {
 }
 
 fn file_to_data_uri(path: &str) -> Result<String> {
-    let bytes = std::fs::read(path)
-        .with_context(|| format!("读取图片失败: {}", path))?;
+    let bytes = std::fs::read(path).with_context(|| format!("读取图片失败: {}", path))?;
     let ext = Path::new(path)
         .extension()
         .and_then(|s| s.to_str())
@@ -154,8 +153,8 @@ pub async fn request(messages: &[Message]) -> Result<String> {
         anyhow::bail!("Agnes 请求失败: HTTP {} - {}", status, text);
     }
 
-    let parsed: ChatCompletionResponse = serde_json::from_str(&text)
-        .with_context(|| format!("解析 Agnes 响应失败: {}", text))?;
+    let parsed: ChatCompletionResponse =
+        serde_json::from_str(&text).with_context(|| format!("解析 Agnes 响应失败: {}", text))?;
     let content = parsed
         .choices
         .into_iter()
@@ -220,7 +219,9 @@ pub async fn request_stream(
                     }
                 }
                 Err(e) => {
-                    let _ = tx.send(Err(anyhow::anyhow!("解析流式响应失败: {} - {}", e, data))).await;
+                    let _ = tx
+                        .send(Err(anyhow::anyhow!("解析流式响应失败: {} - {}", e, data)))
+                        .await;
                     return Ok(());
                 }
             }

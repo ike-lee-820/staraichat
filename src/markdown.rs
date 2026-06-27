@@ -240,7 +240,11 @@ impl MarkdownState {
             Tag::Link { dest_url, .. } => self.link_url = Some(dest_url.to_string()),
             Tag::Image { dest_url, .. } => {
                 self.flush(ui);
-                ui.label(RichText::new(format!("[图片: {}]", dest_url)).italics().color(Color32::GRAY));
+                ui.label(
+                    RichText::new(format!("[图片: {}]", dest_url))
+                        .italics()
+                        .color(Color32::GRAY),
+                );
             }
             _ => {}
         }

@@ -75,8 +75,8 @@ async fn try_request(token: &str, req_messages: &[ReqMessage]) -> Result<String>
         anyhow::bail!("GPT-4.1 请求失败: HTTP {} - {}", status, text);
     }
 
-    let parsed: ChatCompletionResponse = serde_json::from_str(&text)
-        .with_context(|| format!("解析 GPT-4.1 响应失败: {}", text))?;
+    let parsed: ChatCompletionResponse =
+        serde_json::from_str(&text).with_context(|| format!("解析 GPT-4.1 响应失败: {}", text))?;
     let content = parsed
         .choices
         .into_iter()

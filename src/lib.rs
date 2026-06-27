@@ -14,14 +14,15 @@ pub mod android_file_picker;
 pub mod webview_render;
 
 use crate::storage::Storage;
-use crate::types::{
-    Attachment, AttachmentKind, Conversation, ConversationKind, ModelKind,
-};
+use crate::types::{Attachment, AttachmentKind, Conversation, ConversationKind, ModelKind};
 use anyhow::Result;
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use chrono::Local;
 use eframe::NativeOptions;
-use egui::{CentralPanel, ColorImage, Context, RichText, SidePanel, TextureHandle, TopBottomPanel, Ui, Vec2, ViewportBuilder};
+use egui::{
+    CentralPanel, ColorImage, Context, RichText, SidePanel, TextureHandle, TopBottomPanel, Ui,
+    Vec2, ViewportBuilder,
+};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::process::Command;
@@ -34,12 +35,27 @@ enum Screen {
 
 #[allow(dead_code)]
 enum AsyncEvent {
-    ChatReply { conv_id: String, result: Result<String> },
-    Generated { conv_id: String, result: Result<Vec<Attachment>> },
+    ChatReply {
+        conv_id: String,
+        result: Result<String>,
+    },
+    Generated {
+        conv_id: String,
+        result: Result<Vec<Attachment>>,
+    },
     FileUploaded(PendingAttachment),
-    FileDownloaded { file_name: String, result: Result<()> },
-    StreamChunk { conv_id: String, content: String },
-    StreamDone { conv_id: String, result: Result<()> },
+    FileDownloaded {
+        file_name: String,
+        result: Result<()>,
+    },
+    StreamChunk {
+        conv_id: String,
+        content: String,
+    },
+    StreamDone {
+        conv_id: String,
+        result: Result<()>,
+    },
 }
 
 enum MessageAction {
@@ -87,7 +103,7 @@ pub struct App {
     last_webview_hash: Option<u64>,
 }
 
-fn load_font_data(filename: &str) -> Vec<u8> {
+pub(crate) fn load_font_data(filename: &str) -> Vec<u8> {
     let mut candidates: Vec<std::path::PathBuf> = Vec::new();
 
     // 1. 与 exe 同级的 fonts 子目录
@@ -230,9 +246,9 @@ impl App {
     }
 
     fn selected_index(&self) -> Option<usize> {
-        self.selected_id.as_ref().and_then(|id| {
-            self.conversations.iter().position(|c| &c.id == id)
-        })
+        self.selected_id
+            .as_ref()
+            .and_then(|id| self.conversations.iter().position(|c| &c.id == id))
     }
 
     fn selected_conversation(&self) -> Option<&Conversation> {
@@ -241,7 +257,10 @@ impl App {
 
     #[cfg(not(target_os = "android"))]
     fn download_attachment(&self, att: &Attachment) {
-        if let Some(dest) = rfd::FileDialog::new().set_file_name(&att.file_name).save_file() {
+        if let Some(dest) = rfd::FileDialog::new()
+            .set_file_name(&att.file_name)
+            .save_file()
+        {
             if let Err(e) = std::fs::copy(&att.local_path, dest) {
                 eprintln!("下载文件失败: {}", e);
             }
@@ -257,8 +276,8 @@ impl App {
             let result: Result<()> = async {
                 tokio::task::spawn_blocking(move || {
                     use anyhow::Context;
-                    let uri = android_file_picker::save_file(&file_name)?
-                        .context("用户取消保存")?;
+                    let uri =
+                        android_file_picker::save_file(&file_name)?.context("用户取消保存")?;
                     let data = std::fs::read(&local_path)?;
                     android_file_picker::write_uri(&uri, &data)?;
                     Ok(())
@@ -267,14 +286,17 @@ impl App {
                 .map_err(|e| anyhow::anyhow!("下载任务失败: {}", e))?
             }
             .await;
-            let _ = tx.send(AsyncEvent::FileDownloaded { file_name: file_name_for_event, result }).await;
+            let _ = tx
+                .send(AsyncEvent::FileDownloaded {
+                    file_name: file_name_for_event,
+                    result,
+                })
+                .await;
         });
     }
 
     fn open_with_system(&self, path: &str) {
-        let _ = Command::new("cmd")
-            .args(["/c", "start", "", path])
-            .spawn();
+        let _ = Command::new("cmd").args(["/c", "start", "", path]).spawn();
     }
 
     fn render_preview_window(&mut self, ctx: &Context) {
@@ -349,7 +371,8 @@ impl App {
         }
         self.selected_id = Some(conv.id.clone());
         self.conversations.push(conv);
-        self.conversations.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+        self.conversations
+            .sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
     }
 
     fn delete_conversation(&mut self, id: &str) {
@@ -428,7 +451,10 @@ impl App {
 
         for att in self.pending_attachments.drain(..) {
             match att {
-                PendingAttachment::Text { name, content: text } => {
+                PendingAttachment::Text {
+                    name,
+                    content: text,
+                } => {
                     content.push_str(&format!("\n\n[文件 {} 内容]:\n{}", name, text));
                 }
                 PendingAttachment::Image { name, path } => {
@@ -440,7 +466,10 @@ impl App {
                             source_url: String::new(),
                         });
                     } else {
-                        content.push_str(&format!("\n\n[图片 {} 已附加，但当前模型不支持图片输入]", name));
+                        content.push_str(&format!(
+                            "\n\n[图片 {} 已附加，但当前模型不支持图片输入]",
+                            name
+                        ));
                         image_attachments.push(Attachment {
                             kind: AttachmentKind::Image,
                             file_name: name,
@@ -469,9 +498,8 @@ impl App {
 
             self.runtime.spawn(async move {
                 let (chunk_tx, mut chunk_rx) = tokio::sync::mpsc::channel::<Result<String>>(128);
-                let stream_future = async move {
-                    models::agnes::request_stream(&messages, chunk_tx).await
-                };
+                let stream_future =
+                    async move { models::agnes::request_stream(&messages, chunk_tx).await };
                 let stream_task = tokio::spawn(stream_future);
 
                 while let Some(result) = chunk_rx.recv().await {
@@ -499,9 +527,7 @@ impl App {
                 let result = stream_task
                     .await
                     .unwrap_or_else(|e| Err(anyhow::anyhow!("流式任务异常: {}", e)));
-                let _ = tx
-                    .send(AsyncEvent::StreamDone { conv_id, result })
-                    .await;
+                let _ = tx.send(AsyncEvent::StreamDone { conv_id, result }).await;
             });
         } else {
             self.runtime.spawn(async move {
@@ -555,7 +581,8 @@ impl App {
 
         self.runtime.spawn(async move {
             let result: Result<Vec<Attachment>> = async {
-                let urls = models::image_generation::request(&model, &prompt, &size, n, image_urls).await?;
+                let urls = models::image_generation::request(&model, &prompt, &size, n, image_urls)
+                    .await?;
                 let mut attachments = Vec::new();
                 let ts = Local::now().format("%Y%m%d%H%M%S").to_string();
                 for (idx, url) in urls.iter().enumerate() {
@@ -563,13 +590,18 @@ impl App {
                     let local_path = media::download_file(url, &media_dir, &file_name).await?;
                     attachments.push(Attachment {
                         kind: AttachmentKind::Image,
-                        file_name: local_path.file_name().unwrap().to_string_lossy().to_string(),
+                        file_name: local_path
+                            .file_name()
+                            .unwrap()
+                            .to_string_lossy()
+                            .to_string(),
                         local_path: local_path.to_string_lossy().to_string(),
                         source_url: url.clone(),
                     });
                 }
                 Ok(attachments)
-            }.await;
+            }
+            .await;
             let _ = tx.send(AsyncEvent::Generated { conv_id, result }).await;
         });
     }
@@ -632,13 +664,7 @@ impl App {
         self.runtime.spawn(async move {
             let result: Result<Vec<Attachment>> = async {
                 let url = models::video_generation::request(
-                    &prompt,
-                    width,
-                    height,
-                    num_frames,
-                    frame_rate,
-                    image_url,
-                    mode,
+                    &prompt, width, height, num_frames, frame_rate, image_url, mode,
                 )
                 .await?;
                 let mut attachments = Vec::new();
@@ -646,12 +672,17 @@ impl App {
                 let local_path = media::download_file(&url, &media_dir, &ts).await?;
                 attachments.push(Attachment {
                     kind: AttachmentKind::Video,
-                    file_name: local_path.file_name().unwrap().to_string_lossy().to_string(),
+                    file_name: local_path
+                        .file_name()
+                        .unwrap()
+                        .to_string_lossy()
+                        .to_string(),
                     local_path: local_path.to_string_lossy().to_string(),
                     source_url: url,
                 });
                 Ok(attachments)
-            }.await;
+            }
+            .await;
             let _ = tx.send(AsyncEvent::Generated { conv_id, result }).await;
         });
     }
@@ -686,12 +717,17 @@ impl App {
                     if let Some(idx) = self.conversations.iter().position(|c| c.id == conv_id) {
                         match result {
                             Ok(attachments) => {
-                                let content = if self.conversations[idx].kind == ConversationKind::Image {
-                                    "图像生成完成"
-                                } else {
-                                    "视频生成完成"
-                                };
-                                self.conversations[idx].add_message_with_attachments("assistant", content, attachments);
+                                let content =
+                                    if self.conversations[idx].kind == ConversationKind::Image {
+                                        "图像生成完成"
+                                    } else {
+                                        "视频生成完成"
+                                    };
+                                self.conversations[idx].add_message_with_attachments(
+                                    "assistant",
+                                    content,
+                                    attachments,
+                                );
                                 if let Err(e) = self.storage.save(&self.conversations[idx]) {
                                     self.error = Some(format!("保存失败: {}", e));
                                 }
@@ -716,7 +752,8 @@ impl App {
                     }
                 }
             }
-            self.conversations.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+            self.conversations
+                .sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
         }
     }
 
@@ -763,8 +800,7 @@ impl App {
         self.conversations[idx].messages.truncate(assistant_idx);
         self.conversations[idx].updated_at = Local::now();
 
-        let model = ModelKind::from_str(&self.conversations[idx].model)
-            .unwrap_or(ModelKind::Agnes);
+        let model = ModelKind::from_str(&self.conversations[idx].model).unwrap_or(ModelKind::Agnes);
         let messages = self.conversations[idx].messages.clone();
         let tx = self.tx.clone();
 
@@ -779,9 +815,8 @@ impl App {
         if model == ModelKind::Agnes {
             self.runtime.spawn(async move {
                 let (chunk_tx, mut chunk_rx) = tokio::sync::mpsc::channel::<Result<String>>(128);
-                let stream_future = async move {
-                    models::agnes::request_stream(&messages, chunk_tx).await
-                };
+                let stream_future =
+                    async move { models::agnes::request_stream(&messages, chunk_tx).await };
                 let stream_task = tokio::spawn(stream_future);
 
                 while let Some(result) = chunk_rx.recv().await {
@@ -809,9 +844,7 @@ impl App {
                 let result = stream_task
                     .await
                     .unwrap_or_else(|e| Err(anyhow::anyhow!("流式任务异常: {}", e)));
-                let _ = tx
-                    .send(AsyncEvent::StreamDone { conv_id, result })
-                    .await;
+                let _ = tx.send(AsyncEvent::StreamDone { conv_id, result }).await;
             });
         } else {
             self.runtime.spawn(async move {
@@ -842,7 +875,10 @@ impl App {
 
         let task = rfd::AsyncFileDialog::new()
             .add_filter("图片", &["png", "jpg", "jpeg", "webp", "gif"])
-            .add_filter("文本", &["txt", "md", "rs", "py", "js", "ts", "json", "csv"])
+            .add_filter(
+                "文本",
+                &["txt", "md", "rs", "py", "js", "ts", "json", "csv"],
+            )
             .add_filter("所有文件", &["*"])
             .pick_file();
 
@@ -893,17 +929,18 @@ impl App {
                         .and_then(|s| s.to_str())
                         .unwrap_or("")
                         .to_lowercase();
-                    let attachment = if ["png", "jpg", "jpeg", "webp", "gif"].contains(&ext.as_str()) {
-                        PendingAttachment::Image { name, path }
-                    } else {
-                        match tokio::fs::read_to_string(&path).await {
-                            Ok(content) => PendingAttachment::Text { name, content },
-                            Err(_) => PendingAttachment::Text {
-                                name,
-                                content: "[无法读取文件内容]".to_string(),
-                            },
-                        }
-                    };
+                    let attachment =
+                        if ["png", "jpg", "jpeg", "webp", "gif"].contains(&ext.as_str()) {
+                            PendingAttachment::Image { name, path }
+                        } else {
+                            match tokio::fs::read_to_string(&path).await {
+                                Ok(content) => PendingAttachment::Text { name, content },
+                                Err(_) => PendingAttachment::Text {
+                                    name,
+                                    content: "[无法读取文件内容]".to_string(),
+                                },
+                            }
+                        };
                     let _ = tx.send(AsyncEvent::FileUploaded(attachment)).await;
                 }
                 Ok(Ok(None)) => {}
@@ -951,19 +988,40 @@ impl App {
 
                 let button_width = (ui.available_width() - 48.0).clamp(160.0, 280.0);
                 let button_size = Vec2::new(button_width, 70.0);
-                if ui.add_sized(button_size, egui::Button::new(RichText::new("文字对话").size(22.0))).clicked() {
+                if ui
+                    .add_sized(
+                        button_size,
+                        egui::Button::new(RichText::new("文字对话").size(22.0)),
+                    )
+                    .clicked()
+                {
                     self.enter_mode(ConversationKind::Chat);
                 }
                 ui.add_space(24.0);
-                if ui.add_sized(button_size, egui::Button::new(RichText::new("图像生成").size(22.0))).clicked() {
+                if ui
+                    .add_sized(
+                        button_size,
+                        egui::Button::new(RichText::new("图像生成").size(22.0)),
+                    )
+                    .clicked()
+                {
                     self.enter_mode(ConversationKind::Image);
                 }
                 ui.add_space(24.0);
-                if ui.add_sized(button_size, egui::Button::new(RichText::new("视频生成").size(22.0))).clicked() {
+                if ui
+                    .add_sized(
+                        button_size,
+                        egui::Button::new(RichText::new("视频生成").size(22.0)),
+                    )
+                    .clicked()
+                {
                     self.enter_mode(ConversationKind::Video);
                 }
                 ui.add_space(48.0);
-                if ui.add_sized(Vec2::new(120.0, 40.0), egui::Button::new("退出")).clicked() {
+                if ui
+                    .add_sized(Vec2::new(120.0, 40.0), egui::Button::new("退出"))
+                    .clicked()
+                {
                     ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                 }
             });
@@ -990,9 +1048,15 @@ impl App {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui.button("新建对话").clicked() {
                         match kind {
-                            ConversationKind::Chat => self.create_conversation(kind, ModelKind::Agnes.as_str()),
-                            ConversationKind::Image => self.create_conversation(kind, "agnes-image-2.0-flash"),
-                            ConversationKind::Video => self.create_conversation(kind, "agnes-video-v2.0"),
+                            ConversationKind::Chat => {
+                                self.create_conversation(kind, ModelKind::Agnes.as_str())
+                            }
+                            ConversationKind::Image => {
+                                self.create_conversation(kind, "agnes-image-2.0-flash")
+                            }
+                            ConversationKind::Video => {
+                                self.create_conversation(kind, "agnes-video-v2.0")
+                            }
                         }
                     }
                 });
@@ -1010,11 +1074,14 @@ impl App {
                     if narrow {
                         ui.horizontal(|ui| {
                             ui.heading("历史对话");
-                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                if ui.button("×").clicked() {
-                                    self.narrow_sidebar_open = false;
-                                }
-                            });
+                            ui.with_layout(
+                                egui::Layout::right_to_left(egui::Align::Center),
+                                |ui| {
+                                    if ui.button("×").clicked() {
+                                        self.narrow_sidebar_open = false;
+                                    }
+                                },
+                            );
                         });
                     } else {
                         ui.heading("历史对话");
@@ -1023,7 +1090,13 @@ impl App {
                     let indices = self.filtered_indices(kind);
                     let items: Vec<_> = indices
                         .iter()
-                        .map(|&i| (i, self.conversations[i].title.clone(), self.conversations[i].updated_at))
+                        .map(|&i| {
+                            (
+                                i,
+                                self.conversations[i].title.clone(),
+                                self.conversations[i].updated_at,
+                            )
+                        })
                         .collect();
                     egui::ScrollArea::vertical().show(ui, |ui| {
                         ui.add_space(4.0);
@@ -1035,7 +1108,9 @@ impl App {
                                 let delete_width = 44.0;
                                 let spacing = ui.spacing().item_spacing.x;
                                 ui.vertical(|ui| {
-                                    ui.set_max_width((available - delete_width - spacing).max(60.0));
+                                    ui.set_max_width(
+                                        (available - delete_width - spacing).max(60.0),
+                                    );
                                     let response = ui.selectable_label(is_selected, &title);
                                     if response.clicked() {
                                         self.selected_id = Some(id.clone());
@@ -1045,11 +1120,14 @@ impl App {
                                     }
                                     ui.small(updated.format("%m-%d %H:%M").to_string());
                                 });
-                                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                    if ui.small_button("删除").clicked() {
-                                        self.to_delete = Some(id);
-                                    }
-                                });
+                                ui.with_layout(
+                                    egui::Layout::right_to_left(egui::Align::Center),
+                                    |ui| {
+                                        if ui.small_button("删除").clicked() {
+                                            self.to_delete = Some(id);
+                                        }
+                                    },
+                                );
                             });
                             ui.add_space(4.0);
                             ui.separator();
@@ -1092,25 +1170,29 @@ impl App {
                     if narrow {
                         ui.vertical(|ui| {
                             let text_width = ui.available_width();
-                            ui.add(
+                            let text_response = ui.add(
                                 egui::TextEdit::multiline(&mut self.input)
                                     .desired_rows(2)
                                     .desired_width(text_width)
                                     .hint_text(hint),
                             );
+                            self.focus_webview_parent_if_needed(&text_response);
                             ui.horizontal(|ui| {
                                 if ui.button("上传").clicked() && !generating {
                                     self.upload_file();
                                 }
-                                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                    if ui.button(button_text).clicked() && !generating {
-                                        match kind {
-                                            ConversationKind::Chat => self.send_chat_message(),
-                                            ConversationKind::Image => self.generate_image(),
-                                            ConversationKind::Video => self.generate_video(),
+                                ui.with_layout(
+                                    egui::Layout::right_to_left(egui::Align::Center),
+                                    |ui| {
+                                        if ui.button(button_text).clicked() && !generating {
+                                            match kind {
+                                                ConversationKind::Chat => self.send_chat_message(),
+                                                ConversationKind::Image => self.generate_image(),
+                                                ConversationKind::Video => self.generate_video(),
+                                            }
                                         }
-                                    }
-                                });
+                                    },
+                                );
                             });
                         });
                     } else {
@@ -1119,26 +1201,36 @@ impl App {
                             let button_width = 80.0;
                             let button_height = 50.0;
                             let spacing = ui.spacing().item_spacing.x;
-                            let text_width = (ui.available_width() - upload_width - button_width - spacing * 2.0)
+                            let text_width = (ui.available_width()
+                                - upload_width
+                                - button_width
+                                - spacing * 2.0)
                                 .max(100.0);
 
                             if ui
-                                .add_sized(Vec2::new(upload_width, button_height), egui::Button::new("上传"))
+                                .add_sized(
+                                    Vec2::new(upload_width, button_height),
+                                    egui::Button::new("上传"),
+                                )
                                 .clicked()
                                 && !generating
                             {
                                 self.upload_file();
                             }
 
-                            ui.add_sized(
+                            let text_response = ui.add_sized(
                                 Vec2::new(text_width, button_height),
                                 egui::TextEdit::multiline(&mut self.input)
                                     .desired_rows(2)
                                     .hint_text(hint),
                             );
+                            self.focus_webview_parent_if_needed(&text_response);
 
                             if ui
-                                .add_sized(Vec2::new(button_width, button_height), egui::Button::new(button_text))
+                                .add_sized(
+                                    Vec2::new(button_width, button_height),
+                                    egui::Button::new(button_text),
+                                )
                                 .clicked()
                                 && !generating
                             {
@@ -1188,12 +1280,25 @@ impl App {
             let indices = self.filtered_indices(kind);
             if indices.is_empty() {
                 match kind {
-                    ConversationKind::Chat => self.create_conversation(kind, ModelKind::Agnes.as_str()),
-                    ConversationKind::Image => self.create_conversation(kind, "agnes-image-2.0-flash"),
+                    ConversationKind::Chat => {
+                        self.create_conversation(kind, ModelKind::Agnes.as_str())
+                    }
+                    ConversationKind::Image => {
+                        self.create_conversation(kind, "agnes-image-2.0-flash")
+                    }
                     ConversationKind::Video => self.create_conversation(kind, "agnes-video-v2.0"),
                 }
             } else if self.selected_id.is_none() {
                 self.selected_id = Some(self.conversations[indices[0]].id.clone());
+            }
+        }
+    }
+
+    fn focus_webview_parent_if_needed(&self, _response: &egui::Response) {
+        #[cfg(feature = "webview")]
+        if _response.gained_focus() || _response.clicked() {
+            if let Some(wv) = &self.webview {
+                let _ = wv.focus_parent();
             }
         }
     }
@@ -1207,7 +1312,9 @@ impl App {
         let selected_conv = self.selected_conversation().cloned();
         let rect = self.message_area_rect.take();
 
-        let Some(wv) = self.webview.as_mut() else { return };
+        let Some(wv) = self.webview.as_mut() else {
+            return;
+        };
 
         let Some(rect) = rect else {
             let _ = wv.set_visible(false);
@@ -1270,173 +1377,207 @@ impl App {
         let narrow = ui.ctx().screen_rect().width() < 600.0;
         egui::CollapsingHeader::new("生成参数")
             .default_open(false)
-            .show(ui, |ui| {
-                match kind {
-                    ConversationKind::Image => {
-                        if narrow {
-                            ui.vertical(|ui| {
+            .show(ui, |ui| match kind {
+                ConversationKind::Image => {
+                    if narrow {
+                        ui.vertical(|ui| {
+                            ui.label("模型:");
+                            egui::ComboBox::from_id_salt("image_model_setting")
+                                .selected_text(&self.image_model)
+                                .width(ui.available_width().min(180.0))
+                                .show_ui(ui, |ui| {
+                                    for text in ["agnes-image-2.0-flash", "agnes-image-2.1-flash"] {
+                                        if ui
+                                            .selectable_label(self.image_model == text, text)
+                                            .clicked()
+                                        {
+                                            self.image_model = text.to_string();
+                                            if let Some(idx) = self.selected_index() {
+                                                self.conversations[idx].model =
+                                                    self.image_model.clone();
+                                                let _ = self.storage.save(&self.conversations[idx]);
+                                            }
+                                        }
+                                    }
+                                });
+                            ui.label("尺寸:");
+                            egui::ComboBox::from_id_salt("image_size_setting")
+                                .selected_text(&self.image_size)
+                                .width(ui.available_width().min(120.0))
+                                .show_ui(ui, |ui| {
+                                    for text in
+                                        ["1024x1024", "512x512", "768x768", "1024x768", "768x1024"]
+                                    {
+                                        if ui
+                                            .selectable_label(self.image_size == text, text)
+                                            .clicked()
+                                        {
+                                            self.image_size = text.to_string();
+                                        }
+                                    }
+                                });
+                            ui.label("数量:");
+                            ui.add(egui::Slider::new(&mut self.image_n, 1..=4));
+                        });
+                    } else {
+                        egui::Grid::new("image_settings")
+                            .num_columns(2)
+                            .show(ui, |ui| {
                                 ui.label("模型:");
                                 egui::ComboBox::from_id_salt("image_model_setting")
                                     .selected_text(&self.image_model)
-                                    .width(ui.available_width().min(180.0))
+                                    .width(180.0)
                                     .show_ui(ui, |ui| {
-                                        for text in ["agnes-image-2.0-flash", "agnes-image-2.1-flash"] {
-                                            if ui.selectable_label(self.image_model == text, text).clicked() {
+                                        for text in
+                                            ["agnes-image-2.0-flash", "agnes-image-2.1-flash"]
+                                        {
+                                            if ui
+                                                .selectable_label(self.image_model == text, text)
+                                                .clicked()
+                                            {
                                                 self.image_model = text.to_string();
                                                 if let Some(idx) = self.selected_index() {
-                                                    self.conversations[idx].model = self.image_model.clone();
-                                                    let _ = self.storage.save(&self.conversations[idx]);
+                                                    self.conversations[idx].model =
+                                                        self.image_model.clone();
+                                                    let _ =
+                                                        self.storage.save(&self.conversations[idx]);
                                                 }
                                             }
                                         }
                                     });
+                                ui.end_row();
+
                                 ui.label("尺寸:");
                                 egui::ComboBox::from_id_salt("image_size_setting")
                                     .selected_text(&self.image_size)
-                                    .width(ui.available_width().min(120.0))
+                                    .width(120.0)
                                     .show_ui(ui, |ui| {
-                                        for text in ["1024x1024", "512x512", "768x768", "1024x768", "768x1024"] {
-                                            if ui.selectable_label(self.image_size == text, text).clicked() {
+                                        for text in [
+                                            "1024x1024",
+                                            "512x512",
+                                            "768x768",
+                                            "1024x768",
+                                            "768x1024",
+                                        ] {
+                                            if ui
+                                                .selectable_label(self.image_size == text, text)
+                                                .clicked()
+                                            {
                                                 self.image_size = text.to_string();
                                             }
                                         }
                                     });
+                                ui.end_row();
+
                                 ui.label("数量:");
                                 ui.add(egui::Slider::new(&mut self.image_n, 1..=4));
+                                ui.end_row();
                             });
-                        } else {
-                            egui::Grid::new("image_settings")
-                                .num_columns(2)
-                                .show(ui, |ui| {
-                                    ui.label("模型:");
-                                    egui::ComboBox::from_id_salt("image_model_setting")
-                                        .selected_text(&self.image_model)
-                                        .width(180.0)
-                                        .show_ui(ui, |ui| {
-                                            for text in ["agnes-image-2.0-flash", "agnes-image-2.1-flash"] {
-                                                if ui.selectable_label(self.image_model == text, text).clicked() {
-                                                    self.image_model = text.to_string();
-                                                    if let Some(idx) = self.selected_index() {
-                                                        self.conversations[idx].model = self.image_model.clone();
-                                                        let _ = self.storage.save(&self.conversations[idx]);
-                                                    }
-                                                }
-                                            }
-                                        });
-                                    ui.end_row();
-
-                                    ui.label("尺寸:");
-                                    egui::ComboBox::from_id_salt("image_size_setting")
-                                        .selected_text(&self.image_size)
-                                        .width(120.0)
-                                        .show_ui(ui, |ui| {
-                                            for text in ["1024x1024", "512x512", "768x768", "1024x768", "768x1024"] {
-                                                if ui.selectable_label(self.image_size == text, text).clicked() {
-                                                    self.image_size = text.to_string();
-                                                }
-                                            }
-                                        });
-                                    ui.end_row();
-
-                                    ui.label("数量:");
-                                    ui.add(egui::Slider::new(&mut self.image_n, 1..=4));
-                                    ui.end_row();
-                                });
-                        }
                     }
-                    ConversationKind::Video => {
-                        if narrow {
-                            ui.vertical(|ui| {
+                }
+                ConversationKind::Video => {
+                    if narrow {
+                        ui.vertical(|ui| {
+                            ui.label("宽度:");
+                            ui.add(
+                                egui::DragValue::new(&mut self.video_width)
+                                    .speed(16)
+                                    .range(256..=1920),
+                            );
+                            ui.label("高度:");
+                            ui.add(
+                                egui::DragValue::new(&mut self.video_height)
+                                    .speed(16)
+                                    .range(256..=1920),
+                            );
+                            ui.label("帧数:");
+                            ui.add(
+                                egui::DragValue::new(&mut self.video_num_frames)
+                                    .speed(8)
+                                    .range(9..=441),
+                            );
+                            ui.label("帧率:");
+                            ui.add(
+                                egui::DragValue::new(&mut self.video_frame_rate)
+                                    .speed(1)
+                                    .range(1..=60),
+                            );
+                            ui.label("模式:");
+                            egui::ComboBox::from_id_salt("video_mode_setting")
+                                .selected_text(&self.video_mode)
+                                .width(ui.available_width().min(120.0))
+                                .show_ui(ui, |ui| {
+                                    for text in ["ti2vid", "keyframes"] {
+                                        if ui
+                                            .selectable_label(self.video_mode == text, text)
+                                            .clicked()
+                                        {
+                                            self.video_mode = text.to_string();
+                                        }
+                                    }
+                                });
+                        });
+                    } else {
+                        egui::Grid::new("video_settings")
+                            .num_columns(2)
+                            .show(ui, |ui| {
                                 ui.label("宽度:");
                                 ui.add(
                                     egui::DragValue::new(&mut self.video_width)
                                         .speed(16)
                                         .range(256..=1920),
                                 );
+                                ui.end_row();
                                 ui.label("高度:");
                                 ui.add(
                                     egui::DragValue::new(&mut self.video_height)
                                         .speed(16)
                                         .range(256..=1920),
                                 );
+                                ui.end_row();
                                 ui.label("帧数:");
                                 ui.add(
                                     egui::DragValue::new(&mut self.video_num_frames)
                                         .speed(8)
                                         .range(9..=441),
                                 );
+                                ui.end_row();
                                 ui.label("帧率:");
                                 ui.add(
                                     egui::DragValue::new(&mut self.video_frame_rate)
                                         .speed(1)
                                         .range(1..=60),
                                 );
+                                ui.end_row();
                                 ui.label("模式:");
                                 egui::ComboBox::from_id_salt("video_mode_setting")
                                     .selected_text(&self.video_mode)
-                                    .width(ui.available_width().min(120.0))
+                                    .width(120.0)
                                     .show_ui(ui, |ui| {
                                         for text in ["ti2vid", "keyframes"] {
-                                            if ui.selectable_label(self.video_mode == text, text).clicked() {
+                                            if ui
+                                                .selectable_label(self.video_mode == text, text)
+                                                .clicked()
+                                            {
                                                 self.video_mode = text.to_string();
                                             }
                                         }
                                     });
+                                ui.end_row();
                             });
-                        } else {
-                            egui::Grid::new("video_settings")
-                                .num_columns(2)
-                                .show(ui, |ui| {
-                                    ui.label("宽度:");
-                                    ui.add(
-                                        egui::DragValue::new(&mut self.video_width)
-                                            .speed(16)
-                                            .range(256..=1920),
-                                    );
-                                    ui.end_row();
-                                    ui.label("高度:");
-                                    ui.add(
-                                        egui::DragValue::new(&mut self.video_height)
-                                            .speed(16)
-                                            .range(256..=1920),
-                                    );
-                                    ui.end_row();
-                                    ui.label("帧数:");
-                                    ui.add(
-                                        egui::DragValue::new(&mut self.video_num_frames)
-                                            .speed(8)
-                                            .range(9..=441),
-                                    );
-                                    ui.end_row();
-                                    ui.label("帧率:");
-                                    ui.add(
-                                        egui::DragValue::new(&mut self.video_frame_rate)
-                                            .speed(1)
-                                            .range(1..=60),
-                                    );
-                                    ui.end_row();
-                                    ui.label("模式:");
-                                    egui::ComboBox::from_id_salt("video_mode_setting")
-                                        .selected_text(&self.video_mode)
-                                        .width(120.0)
-                                        .show_ui(ui, |ui| {
-                                            for text in ["ti2vid", "keyframes"] {
-                                                if ui.selectable_label(self.video_mode == text, text).clicked() {
-                                                    self.video_mode = text.to_string();
-                                                }
-                                            }
-                                        });
-                                    ui.end_row();
-                                });
-                        }
                     }
-                    _ => {}
                 }
+                _ => {}
             });
         ui.separator();
     }
 
-    fn render_conversation_header(&mut self, ui: &mut Ui, conv: &Conversation, kind: ConversationKind) {
+    fn render_conversation_header(
+        &mut self,
+        ui: &mut Ui,
+        conv: &Conversation,
+        kind: ConversationKind,
+    ) {
         let narrow = ui.ctx().screen_rect().width() < 600.0;
         if narrow {
             ui.vertical(|ui| {
@@ -1503,8 +1644,12 @@ impl App {
             let _ = self.load_texture(ctx, &path);
         }
 
-        let attachments: Vec<(usize, PendingAttachment)> =
-            self.pending_attachments.iter().cloned().enumerate().collect();
+        let attachments: Vec<(usize, PendingAttachment)> = self
+            .pending_attachments
+            .iter()
+            .cloned()
+            .enumerate()
+            .collect();
 
         ui.horizontal_wrapped(|ui| {
             ui.label("已上传:");
@@ -1616,13 +1761,17 @@ impl App {
                                 for att in &msg.attachments {
                                     match att.kind {
                                         AttachmentKind::Image => {
-                                            if let Some(texture) = self.load_texture(ctx, &att.local_path) {
+                                            if let Some(texture) =
+                                                self.load_texture(ctx, &att.local_path)
+                                            {
                                                 let size = texture.size_vec2();
                                                 let max_img_width = max_width.min(400.0);
                                                 let scale = (max_img_width / size.x).min(1.0);
                                                 let display_size = size * scale;
-                                                let response =
-                                                    ui.add(egui::ImageButton::new((texture.id(), display_size)));
+                                                let response = ui.add(egui::ImageButton::new((
+                                                    texture.id(),
+                                                    display_size,
+                                                )));
                                                 if response.clicked() {
                                                     self.preview_attachment = Some(att.clone());
                                                 }
@@ -1635,7 +1784,10 @@ impl App {
                                                     }
                                                 });
                                             } else {
-                                                ui.label(format!("图片加载失败: {}", att.local_path));
+                                                ui.label(format!(
+                                                    "图片加载失败: {}",
+                                                    att.local_path
+                                                ));
                                             }
                                         }
                                         AttachmentKind::Video => {
@@ -1693,8 +1845,7 @@ impl App {
 
 pub fn run_app() -> eframe::Result {
     let options = NativeOptions {
-        viewport: ViewportBuilder::default()
-            .with_inner_size([1200.0, 800.0]),
+        viewport: ViewportBuilder::default().with_inner_size([1200.0, 800.0]),
         ..Default::default()
     };
     eframe::run_native(
@@ -1714,8 +1865,7 @@ fn android_main(app: android_activity::AndroidApp) {
     android_file_picker::set_vm(app.vm_as_ptr() as *mut _);
 
     let mut options = NativeOptions {
-        viewport: ViewportBuilder::default()
-            .with_inner_size([1200.0, 800.0]),
+        viewport: ViewportBuilder::default().with_inner_size([1200.0, 800.0]),
         ..Default::default()
     };
 

@@ -1,6 +1,8 @@
 use crate::types::{Attachment, AttachmentKind, Conversation};
 use anyhow::{Context, Result};
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use pulldown_cmark::{CowStr, Event, Options, Parser};
+use std::path::Path;
 use std::sync::mpsc::{channel, Receiver};
 use wry::http::Request;
 use wry::{WebView, WebViewBuilder};
@@ -24,8 +26,10 @@ pub struct MessageWebView {
 impl MessageWebView {
     pub fn new(parent: &impl wry::raw_window_handle::HasWindowHandle) -> Result<Self> {
         let (tx, rx) = channel::<String>();
+        let html = inject_fonts(SHELL_HTML);
         let webview = WebViewBuilder::new()
-            .with_html(SHELL_HTML)
+            .with_html(&html)
+            .with_transparent(true)
             .with_ipc_handler(move |req: Request<String>| {
                 let _ = tx.send(req.body().clone());
             })
@@ -41,7 +45,9 @@ impl MessageWebView {
     }
 
     pub fn set_bounds(&self, rect: wry::Rect) -> Result<()> {
-        self.webview.set_bounds(rect).context("设置 WebView 位置失败")
+        self.webview
+            .set_bounds(rect)
+            .context("设置 WebView 位置失败")
     }
 
     pub fn set_content(&self, html: &str) -> Result<()> {
@@ -54,6 +60,10 @@ impl MessageWebView {
             .context("更新 WebView 内容失败")
     }
 
+    pub fn focus_parent(&self) -> Result<()> {
+        self.webview.focus_parent().context("切回父窗口焦点失败")
+    }
+
     pub fn drain_actions(&mut self) -> Vec<WebViewAction> {
         let mut actions = Vec::new();
         while let Ok(msg) = self.rx.try_recv() {
@@ -63,6 +73,38 @@ impl MessageWebView {
         }
         actions
     }
+}
+
+fn inject_fonts(html: &str) -> String {
+    let css = font_css();
+    html.replacen("</head>", &format!("<style>{}</style></head>", css), 1)
+}
+
+fn font_css() -> String {
+    let regular = crate::load_font_data("a.otf");
+    let bold = crate::load_font_data("b.otf");
+    let code = crate::load_font_data("dk.ttf");
+
+    let mut css = String::new();
+    if !regular.is_empty() {
+        css.push_str(&format!(
+            r#"@font-face {{ font-family: "AppRegular"; src: url("data:font/otf;base64,{}"); }}"#,
+            BASE64.encode(&regular)
+        ));
+    }
+    if !bold.is_empty() {
+        css.push_str(&format!(
+            r#"@font-face {{ font-family: "AppBold"; src: url("data:font/otf;base64,{}"); font-weight: bold; }}"#,
+            BASE64.encode(&bold)
+        ));
+    }
+    if !code.is_empty() {
+        css.push_str(&format!(
+            r#"@font-face {{ font-family: "AppCode"; src: url("data:font/ttf;base64,{}"); }}"#,
+            BASE64.encode(&code)
+        ));
+    }
+    css
 }
 
 fn parse_action(json: &str) -> anyhow::Result<WebViewAction> {
@@ -130,15 +172,16 @@ pub fn conversation_html(conv: &Conversation) -> String {
         for att in &msg.attachments {
             match att.kind {
                 AttachmentKind::Image => {
+                    let src = image_data_uri(&att.local_path);
                     attachments_html.push_str(&format!(
                         r#"<div class="attachment">
-  <img src="file://{}" style="max-width:100%;border-radius:6px;cursor:pointer;" onclick="sendAttachmentAction('preview','{}','{}','{}')">
+  <img src="{}" style="max-width:100%;border-radius:6px;cursor:pointer;" onclick="sendAttachmentAction('preview','{}','{}','{}')">
   <div class="attachment-actions">
     <button onclick="sendAttachmentAction('preview','{}','{}','{}')">预览</button>
     <button onclick="sendAttachmentAction('download','{}','{}','{}')">下载</button>
   </div>
 </div>"#,
-                        html_escape(&att.local_path),
+                        src,
                         att.kind.kind_str(),
                         js_escape(&att.file_name),
                         js_escape(&att.local_path),
@@ -216,26 +259,18 @@ impl AttachmentKind {
 
 fn markdown_to_html(text: &str) -> String {
     let text = preprocess(text);
-    let parser = Parser::new_ext(
-        &text,
-        Options::ENABLE_MATH | Options::ENABLE_STRIKETHROUGH,
-    );
+    let parser = Parser::new_ext(&text, Options::ENABLE_MATH | Options::ENABLE_STRIKETHROUGH);
     let events = parser.map(|event| match event {
         Event::InlineMath(math) => {
             let escaped = html_escape(&math);
             Event::Html(CowStr::Boxed(
-                format!("<span class=\"math-inline\">${}${}</span>", escaped, "")
-                    .into_boxed_str(),
+                format!("<span class=\"math-inline\">${}${}</span>", escaped, "").into_boxed_str(),
             ))
         }
         Event::DisplayMath(math) => {
             let escaped = html_escape(&math);
             Event::Html(CowStr::Boxed(
-                format!(
-                    "<div class=\"math-display\">$${}$$</div>",
-                    escaped
-                )
-                .into_boxed_str(),
+                format!("<div class=\"math-display\">$${}$$</div>", escaped).into_boxed_str(),
             ))
         }
         _ => event,
@@ -258,13 +293,29 @@ fn preprocess(text: &str) -> String {
 
     let re_display = regex::Regex::new(r"\\\[(?s)(.*?)\\\]").unwrap();
     let re_inline = regex::Regex::new(r"\\\((?s)(.*?)\\\)").unwrap();
-    let out = re_display.replace_all(&out, |caps: &regex::Captures| {
-        format!("$${}$$", &caps[1])
-    });
-    let out = re_inline.replace_all(&out, |caps: &regex::Captures| {
-        format!("${}$", &caps[1])
-    });
+    let out = re_display.replace_all(&out, |caps: &regex::Captures| format!("$${}$$", &caps[1]));
+    let out = re_inline.replace_all(&out, |caps: &regex::Captures| format!("${}$", &caps[1]));
     out.into_owned()
+}
+
+fn image_data_uri(path: &str) -> String {
+    let ext = Path::new(path)
+        .extension()
+        .and_then(|s| s.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+    let mime = match ext.as_str() {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "bmp" => "image/bmp",
+        _ => "image/png",
+    };
+    match std::fs::read(path) {
+        Ok(bytes) => format!("data:{};base64,{}", mime, BASE64.encode(&bytes)),
+        Err(_) => format!("file://{}", html_escape(path)),
+    }
 }
 
 fn html_escape(s: &str) -> String {

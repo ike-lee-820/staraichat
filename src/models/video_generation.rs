@@ -122,9 +122,7 @@ pub async fn request(
 
         match result.status.as_str() {
             "completed" => {
-                return result
-                    .video_url
-                    .context("视频生成成功但无 URL");
+                return result.video_url.context("视频生成成功但无 URL");
             }
             "failed" => {
                 let err = result.error.map(|e| e.to_string()).unwrap_or_default();

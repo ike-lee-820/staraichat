@@ -20,8 +20,7 @@ fn extension_from_content_type(content_type: &str) -> &str {
 }
 
 pub async fn download_file(url: &str, dir: &Path, file_name: &str) -> Result<PathBuf> {
-    fs::create_dir_all(dir)
-        .with_context(|| format!("无法创建媒体目录: {}", dir.display()))?;
+    fs::create_dir_all(dir).with_context(|| format!("无法创建媒体目录: {}", dir.display()))?;
 
     let client = Client::new();
     let response = client
@@ -43,10 +42,11 @@ pub async fn download_file(url: &str, dir: &Path, file_name: &str) -> Result<Pat
     let ext = extension_from_content_type(content_type);
 
     let path = dir.join(format!("{}.{}", file_name, ext));
-    let bytes = response.bytes().await
+    let bytes = response
+        .bytes()
+        .await
         .with_context(|| format!("读取下载内容失败: {}", url))?;
-    fs::write(&path, bytes)
-        .with_context(|| format!("写入媒体文件失败: {}", path.display()))?;
+    fs::write(&path, bytes).with_context(|| format!("写入媒体文件失败: {}", path.display()))?;
 
     Ok(path)
 }

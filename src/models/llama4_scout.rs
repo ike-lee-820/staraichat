@@ -71,7 +71,10 @@ async fn try_request(token: &str, req_messages: &[ReqMessage]) -> Result<String>
         .context("Llama-4-Scout 请求发送失败")?;
 
     let status = response.status();
-    let text = response.text().await.context("读取 Llama-4-Scout 响应失败")?;
+    let text = response
+        .text()
+        .await
+        .context("读取 Llama-4-Scout 响应失败")?;
     if !status.is_success() {
         anyhow::bail!("Llama-4-Scout 请求失败: HTTP {} - {}", status, text);
     }

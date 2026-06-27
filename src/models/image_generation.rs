@@ -64,14 +64,10 @@ pub async fn request(
         bail!("图像生成请求失败: HTTP {} - {}", status, text);
     }
 
-    let parsed: ImageGenerationResponse = serde_json::from_str(&text)
-        .with_context(|| format!("解析图像生成响应失败: {}", text))?;
+    let parsed: ImageGenerationResponse =
+        serde_json::from_str(&text).with_context(|| format!("解析图像生成响应失败: {}", text))?;
 
-    let urls: Vec<String> = parsed
-        .data
-        .into_iter()
-        .filter_map(|d| d.url)
-        .collect();
+    let urls: Vec<String> = parsed.data.into_iter().filter_map(|d| d.url).collect();
 
     if urls.is_empty() {
         bail!("图像生成响应中无 URL");

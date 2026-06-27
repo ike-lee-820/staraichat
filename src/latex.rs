@@ -172,8 +172,8 @@ pub fn render_inline_latex(input: &str) -> String {
                     "oplus" => result.push('⊕'),
                     "otimes" => result.push('⊗'),
                     "cdotp" => result.push('·'),
-                    "text" | "mathrm" | "mathit" | "mathbf" | "boldsymbol"
-                    | "mathsf" | "mathtt" | "operatorname" | "mbox" | "hbox" => {
+                    "text" | "mathrm" | "mathit" | "mathbf" | "boldsymbol" | "mathsf"
+                    | "mathtt" | "operatorname" | "mbox" | "hbox" => {
                         while i < chars.len() && chars[i].is_whitespace() {
                             i += 1;
                         }
@@ -207,8 +207,8 @@ pub fn render_inline_latex(input: &str) -> String {
                             result.push_str(&inner);
                         }
                     }
-                    "overline" | "underline" | "hat" | "bar" | "vec" | "dot" | "ddot"
-                    | "tilde" | "widehat" | "widetilde" => {
+                    "overline" | "underline" | "hat" | "bar" | "vec" | "dot" | "ddot" | "tilde"
+                    | "widehat" | "widetilde" => {
                         while i < chars.len() && chars[i].is_whitespace() {
                             i += 1;
                         }
@@ -227,10 +227,10 @@ pub fn render_inline_latex(input: &str) -> String {
                             }
                         }
                     }
-                    "lim" | "log" | "ln" | "lg" | "sin" | "cos" | "tan" | "cot" | "sec"
-                    | "csc" | "arcsin" | "arccos" | "arctan" | "sinh" | "cosh" | "tanh"
-                    | "coth" | "det" | "dim" | "arg" | "gcd" | "max" | "min" | "sup"
-                    | "inf" | "exp" | "Pr" | "ker" | "hom" | "deg" | "bmod" | "pmod" => {
+                    "lim" | "log" | "ln" | "lg" | "sin" | "cos" | "tan" | "cot" | "sec" | "csc"
+                    | "arcsin" | "arccos" | "arctan" | "sinh" | "cosh" | "tanh" | "coth"
+                    | "det" | "dim" | "arg" | "gcd" | "max" | "min" | "sup" | "inf" | "exp"
+                    | "Pr" | "ker" | "hom" | "deg" | "bmod" | "pmod" => {
                         result.push_str(&cmd);
                     }
                     "begin" | "end" => {

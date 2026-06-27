@@ -90,12 +90,7 @@ fn get_pick_result() -> Result<Option<(String, String)>> {
             )?
             .l()?;
         let result: JString = env
-            .call_method(
-                &activity,
-                "getPickResult",
-                "()Ljava/lang/String;",
-                &[],
-            )?
+            .call_method(&activity, "getPickResult", "()Ljava/lang/String;", &[])?
             .l()?
             .into();
         let s: String = env.get_string(&result)?.into();
@@ -137,12 +132,7 @@ fn get_save_result() -> Result<Option<String>> {
             )?
             .l()?;
         let result: JString = env
-            .call_method(
-                &activity,
-                "getSaveResult",
-                "()Ljava/lang/String;",
-                &[],
-            )?
+            .call_method(&activity, "getSaveResult", "()Ljava/lang/String;", &[])?
             .l()?
             .into();
         let s: String = env.get_string(&result)?.into();
