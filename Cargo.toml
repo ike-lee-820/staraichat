@@ -60,6 +60,9 @@ resources = "res"
 min_sdk_version = 21
 target_sdk_version = 33
 
+[package.metadata.android.signing.release]
+path = "android-release.keystore"
+
 [package.metadata.android.application]
 label = "StarAIChat"
 icon = "@mipmap/ic_launcher"
