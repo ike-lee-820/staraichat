@@ -1304,7 +1304,7 @@ impl App {
     }
 
     #[cfg(feature = "webview")]
-    fn update_webview(&mut self, _ctx: &Context) {
+    fn update_webview(&mut self, ctx: &Context) {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
 
@@ -1332,9 +1332,18 @@ impl App {
         }
 
         let _ = wv.set_visible(true);
+        let scale = ctx.pixels_per_point() as f64;
         let bounds = wry::Rect {
-            position: wry::dpi::LogicalPosition::new(rect.min.x as f64, rect.min.y as f64).into(),
-            size: wry::dpi::LogicalSize::new(rect.width() as f64, rect.height() as f64).into(),
+            position: wry::dpi::PhysicalPosition::new(
+                (rect.min.x as f64 * scale).round() as i32,
+                (rect.min.y as f64 * scale).round() as i32,
+            )
+            .into(),
+            size: wry::dpi::PhysicalSize::new(
+                (rect.width() as f64 * scale).round() as u32,
+                (rect.height() as f64 * scale).round() as u32,
+            )
+            .into(),
         };
         let _ = wv.set_bounds(bounds);
 

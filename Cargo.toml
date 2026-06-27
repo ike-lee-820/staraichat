@@ -58,7 +58,7 @@ resources = "res"
 
 [package.metadata.android.sdk]
 min_sdk_version = 21
-target_sdk_version = 33
+target_sdk_version = 34
 
 [package.metadata.android.signing.release]
 path = "android-release.keystore"
@@ -70,3 +70,4 @@ theme = "@android:style/Theme.DeviceDefault.NoActionBar"
 
 [package.metadata.android.application.activity]
 name = "cc.ccwu.staraichat.StarAIChatActivity"
+exported = true

@@ -295,9 +295,9 @@ jobs:
         run: |
           mkdir -p android/build
           javac -d android/build \
-            -cp "$ANDROID_HOME/platforms/android-33/android.jar" \
+            -cp "$ANDROID_HOME/platforms/android-34/android.jar" \
             android/src/cc/ccwu/staraichat/StarAIChatActivity.java
-          $ANDROID_HOME/build-tools/33.0.0/d8 \
+          $ANDROID_HOME/build-tools/34.0.0/d8 \
             android/build/cc/ccwu/staraichat/StarAIChatActivity.class \
             --output android/build/
           APK=$(find target/release/apk -name "*.apk" | head -1)
@@ -312,8 +312,8 @@ jobs:
         env:
           ANDROID_HOME: /usr/local/lib/android/sdk
         run: |
-          $ANDROID_HOME/build-tools/33.0.0/zipalign -f -p 4 unsigned_with_dex.apk aligned.apk
-          $ANDROID_HOME/build-tools/33.0.0/apksigner sign \
+          $ANDROID_HOME/build-tools/34.0.0/zipalign -f -p 4 unsigned_with_dex.apk aligned.apk
+          $ANDROID_HOME/build-tools/34.0.0/apksigner sign \
             --ks android-release.keystore \
             --ks-key-alias staraichat \
             --ks-pass pass:"$ANDROID_KEYSTORE_PASSWORD" \
