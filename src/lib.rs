@@ -9,6 +9,9 @@ pub mod secrets;
 pub mod storage;
 pub mod types;
 
+#[cfg(target_os = "android")]
+pub mod android_file_picker;
+
 use crate::storage::Storage;
 use crate::types::{
     Attachment, AttachmentKind, Conversation, ConversationKind, ModelKind,
@@ -218,10 +221,19 @@ impl App {
         self.selected_index().map(|idx| &self.conversations[idx])
     }
 
+    #[cfg(not(target_os = "android"))]
     fn download_attachment(&self, att: &Attachment) {
         if let Some(dest) = rfd::FileDialog::new().set_file_name(&att.file_name).save_file() {
             if let Err(e) = std::fs::copy(&att.local_path, dest) {
                 eprintln!("下载文件失败: {}", e);
+            }
+        }
+    }
+    #[cfg(target_os = "android")]
+    fn download_attachment(&self, att: &Attachment) {
+        if let Ok(Some(uri)) = android_file_picker::save_file(&att.file_name) {
+            if let Ok(data) = std::fs::read(&att.local_path) {
+                let _ = android_file_picker::write_uri(&uri, &data);
             }
         }
     }
@@ -783,6 +795,7 @@ impl App {
         self.image_textures.get(path)
     }
 
+    #[cfg(not(target_os = "android"))]
     fn upload_file(&mut self) {
         if self.selected_id.is_none() {
             return;
@@ -824,6 +837,38 @@ impl App {
                 };
 
                 let _ = tx.send(AsyncEvent::FileUploaded(attachment)).await;
+            }
+        });
+    }
+    #[cfg(target_os = "android")]
+    fn upload_file(&mut self) {
+        if self.selected_id.is_none() {
+            return;
+        }
+        let tx = self.tx.clone();
+        self.runtime.spawn(async move {
+            match android_file_picker::pick_file() {
+                Ok(Some((name, path))) => {
+                    let ext = std::path::Path::new(&path)
+                        .extension()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("")
+                        .to_lowercase();
+                    let attachment = if ["png", "jpg", "jpeg", "webp", "gif"].contains(&ext.as_str()) {
+                        PendingAttachment::Image { name, path }
+                    } else {
+                        match tokio::fs::read_to_string(&path).await {
+                            Ok(content) => PendingAttachment::Text { name, content },
+                            Err(_) => PendingAttachment::Text {
+                                name,
+                                content: "[无法读取文件内容]".to_string(),
+                            },
+                        }
+                    };
+                    let _ = tx.send(AsyncEvent::FileUploaded(attachment)).await;
+                }
+                Ok(None) => {}
+                Err(e) => eprintln!("选择文件失败: {}", e),
             }
         });
     }
@@ -1529,6 +1574,8 @@ fn android_main(app: android_activity::AndroidApp) {
     android_logger::init_once(
         android_logger::Config::default().with_max_level(log::LevelFilter::Debug),
     );
+
+    android_file_picker::set_vm(app.vm_as_ptr() as *mut _);
 
     let mut options = NativeOptions {
         viewport: ViewportBuilder::default()

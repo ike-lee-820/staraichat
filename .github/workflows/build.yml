@@ -282,6 +282,14 @@ jobs:
           export ANDROID_HOME=/usr/local/lib/android/sdk
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-21" "build-tools;29.0.3" || true
 
+      - name: Compile Java Activity
+        run: |
+          export ANDROID_HOME=/usr/local/lib/android/sdk
+          mkdir -p android/build
+          javac -d android/build \
+            -cp "$ANDROID_HOME/platforms/android-21/android.jar" \
+            android/src/cc/ccwu/staraichat/StarAIChatActivity.java
+
       - name: Install cargo-apk
         run: |
           for i in 1 2 3; do
@@ -311,7 +319,9 @@ jobs:
           ANDROID_HOME: /usr/local/lib/android/sdk
           CARGO_APK_RELEASE_KEYSTORE: ${{ github.workspace }}/android-release.keystore
           CARGO_APK_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-        run: cargo apk build --release
+        run: |
+          cargo apk build --release
+          # cargo-apk 默认不会自动包含额外编译的 class，如需手动合并请检查输出
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
