@@ -10,6 +10,9 @@ pub mod types;
 #[cfg(target_os = "android")]
 pub mod android_file_picker;
 
+#[cfg(feature = "webview")]
+pub mod webview_render;
+
 use crate::storage::Storage;
 use crate::types::{
     Attachment, AttachmentKind, Conversation, ConversationKind, ModelKind,
@@ -18,7 +21,7 @@ use anyhow::Result;
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use chrono::Local;
 use eframe::NativeOptions;
-use egui::{CentralPanel, ColorImage, Context, RichText, SidePanel, TextureHandle, TopBottomPanel, Ui, Vec2, ViewportBuilder, Widget};
+use egui::{CentralPanel, ColorImage, Context, RichText, SidePanel, TextureHandle, TopBottomPanel, Ui, Vec2, ViewportBuilder};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::process::Command;
@@ -76,6 +79,12 @@ pub struct App {
     pending_message_action: Option<MessageAction>,
     rx: mpsc::Receiver<AsyncEvent>,
     tx: mpsc::Sender<AsyncEvent>,
+    #[cfg(feature = "webview")]
+    webview: Option<webview_render::MessageWebView>,
+    #[cfg(feature = "webview")]
+    message_area_rect: Option<egui::Rect>,
+    #[cfg(feature = "webview")]
+    last_webview_hash: Option<u64>,
 }
 
 fn load_font_data(filename: &str) -> Vec<u8> {
@@ -154,23 +163,23 @@ impl App {
         style.text_styles = [
             (
                 egui::TextStyle::Heading,
-                egui::FontId::new(28.0, egui::FontFamily::Name("Bold".into())),
+                egui::FontId::new(32.0, egui::FontFamily::Name("Bold".into())),
             ),
             (
                 egui::TextStyle::Body,
-                egui::FontId::new(18.0, egui::FontFamily::Proportional),
+                egui::FontId::new(21.0, egui::FontFamily::Proportional),
             ),
             (
                 egui::TextStyle::Monospace,
-                egui::FontId::new(16.0, egui::FontFamily::Monospace),
+                egui::FontId::new(18.0, egui::FontFamily::Monospace),
             ),
             (
                 egui::TextStyle::Button,
-                egui::FontId::new(19.0, egui::FontFamily::Name("Bold".into())),
+                egui::FontId::new(22.0, egui::FontFamily::Name("Bold".into())),
             ),
             (
                 egui::TextStyle::Small,
-                egui::FontId::new(15.0, egui::FontFamily::Proportional),
+                egui::FontId::new(17.0, egui::FontFamily::Proportional),
             ),
         ]
         .into();
@@ -181,6 +190,9 @@ impl App {
         let storage = Storage::new(&storage_dir, &media_dir).expect("初始化存储失败");
         let conversations = storage.list().unwrap_or_default();
         let (tx, rx) = mpsc::channel(100);
+
+        #[cfg(feature = "webview")]
+        let webview = webview_render::MessageWebView::new(cc).ok();
 
         Self {
             screen: Screen::MainMenu,
@@ -208,6 +220,12 @@ impl App {
             pending_message_action: None,
             rx,
             tx,
+            #[cfg(feature = "webview")]
+            webview,
+            #[cfg(feature = "webview")]
+            message_area_rect: None,
+            #[cfg(feature = "webview")]
+            last_webview_hash: None,
         }
     }
 
@@ -362,6 +380,7 @@ impl App {
         self.error = None;
     }
 
+    #[cfg(not(feature = "webview"))]
     fn split_think_content(content: &str) -> (Option<String>, String) {
         let start_tag = "<think>";
         let end_tag = "</think>";
@@ -907,6 +926,9 @@ impl eframe::App for App {
             }
         }
 
+        #[cfg(feature = "webview")]
+        self.update_webview(ctx);
+
         self.render_preview_window(ctx);
         self.process_pending_actions(ctx);
     }
@@ -917,7 +939,7 @@ impl App {
         CentralPanel::default().show(ctx, |ui| {
             ui.vertical_centered(|ui| {
                 let narrow = ctx.screen_rect().width() < 600.0;
-                let title_size = if narrow { 28.0 } else { 36.0 };
+                let title_size = if narrow { 32.0 } else { 40.0 };
                 let top_space = if narrow { 60.0 } else { 100.0 };
                 let mid_space = if narrow { 48.0 } else { 80.0 };
 
@@ -929,15 +951,15 @@ impl App {
 
                 let button_width = (ui.available_width() - 48.0).clamp(160.0, 280.0);
                 let button_size = Vec2::new(button_width, 70.0);
-                if ui.add_sized(button_size, egui::Button::new(RichText::new("文字对话").size(20.0))).clicked() {
+                if ui.add_sized(button_size, egui::Button::new(RichText::new("文字对话").size(22.0))).clicked() {
                     self.enter_mode(ConversationKind::Chat);
                 }
                 ui.add_space(24.0);
-                if ui.add_sized(button_size, egui::Button::new(RichText::new("图像生成").size(20.0))).clicked() {
+                if ui.add_sized(button_size, egui::Button::new(RichText::new("图像生成").size(22.0))).clicked() {
                     self.enter_mode(ConversationKind::Image);
                 }
                 ui.add_space(24.0);
-                if ui.add_sized(button_size, egui::Button::new(RichText::new("视频生成").size(20.0))).clicked() {
+                if ui.add_sized(button_size, egui::Button::new(RichText::new("视频生成").size(22.0))).clicked() {
                     self.enter_mode(ConversationKind::Video);
                 }
                 ui.add_space(48.0);
@@ -1050,7 +1072,15 @@ impl App {
                         self.render_generation_settings(ui, kind);
                     }
                     self.render_conversation_header(ui, &conv_clone, kind);
-                    self.render_messages(ctx, ui, &conv_clone);
+                    #[cfg(feature = "webview")]
+                    {
+                        let (_id, rect) = ui.allocate_space(ui.available_size());
+                        self.message_area_rect = Some(rect);
+                    }
+                    #[cfg(not(feature = "webview"))]
+                    {
+                        self.render_messages(ctx, ui, &conv_clone);
+                    }
                 } else {
                     ui.centered_and_justified(|ui| {
                         ui.label("请选择或创建一个对话");
@@ -1164,6 +1194,74 @@ impl App {
                 }
             } else if self.selected_id.is_none() {
                 self.selected_id = Some(self.conversations[indices[0]].id.clone());
+            }
+        }
+    }
+
+    #[cfg(feature = "webview")]
+    fn update_webview(&mut self, _ctx: &Context) {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
+        let in_mode = matches!(self.screen, Screen::Mode(_));
+        let selected_conv = self.selected_conversation().cloned();
+        let rect = self.message_area_rect.take();
+
+        let Some(wv) = self.webview.as_mut() else { return };
+
+        let Some(rect) = rect else {
+            let _ = wv.set_visible(false);
+            return;
+        };
+
+        if !in_mode || selected_conv.is_none() {
+            let _ = wv.set_visible(false);
+            return;
+        }
+
+        if rect.width() <= 1.0 || rect.height() <= 1.0 {
+            let _ = wv.set_visible(false);
+            return;
+        }
+
+        let _ = wv.set_visible(true);
+        let bounds = wry::Rect {
+            position: wry::dpi::LogicalPosition::new(rect.min.x as f64, rect.min.y as f64).into(),
+            size: wry::dpi::LogicalSize::new(rect.width() as f64, rect.height() as f64).into(),
+        };
+        let _ = wv.set_bounds(bounds);
+
+        if let Some(conv) = selected_conv.as_ref() {
+            let html = webview_render::conversation_html(conv);
+            let mut hasher = DefaultHasher::new();
+            html.hash(&mut hasher);
+            let hash = hasher.finish();
+            if self.last_webview_hash != Some(hash) {
+                let _ = wv.set_content(&html);
+                self.last_webview_hash = Some(hash);
+            }
+        }
+
+        for action in wv.drain_actions() {
+            match action {
+                webview_render::WebViewAction::Copy { content } => {
+                    self.pending_copy = Some(content);
+                }
+                webview_render::WebViewAction::Regenerate { conv_id, idx } => {
+                    self.pending_message_action = Some(MessageAction::Regenerate { conv_id, idx });
+                }
+                webview_render::WebViewAction::Delete { conv_id, idx } => {
+                    self.pending_message_action = Some(MessageAction::Delete { conv_id, idx });
+                }
+                webview_render::WebViewAction::Preview { attachment } => {
+                    self.preview_attachment = Some(attachment);
+                }
+                webview_render::WebViewAction::Play { local_path } => {
+                    self.open_with_system(&local_path);
+                }
+                webview_render::WebViewAction::Download { attachment } => {
+                    self.download_attachment(&attachment);
+                }
             }
         }
     }
@@ -1445,6 +1543,7 @@ impl App {
         ui.add_space(8.0);
     }
 
+    #[cfg(not(feature = "webview"))]
     fn render_messages(&mut self, ctx: &Context, ui: &mut Ui, conv: &Conversation) {
         egui::ScrollArea::vertical()
             .auto_shrink([false; 2])
@@ -1461,6 +1560,11 @@ impl App {
                     } else {
                         egui::Color32::from_rgb(240, 240, 240)
                     };
+
+                    let msg_content = msg.content.clone();
+                    let msg_role = msg.role.clone();
+                    let conv_id = conv.id.clone();
+                    let conv_kind = conv.kind;
 
                     let align = if is_user {
                         egui::Layout::right_to_left(egui::Align::TOP)
@@ -1481,7 +1585,11 @@ impl App {
                             .stroke(egui::Stroke::NONE)
                             .inner_margin(inner_margin)
                             .show(ui, |ui| {
-                                let max_width = ui.available_width() * if narrow { 0.95 } else { 0.75 };
+                                let max_width = if narrow {
+                                    ui.available_width() - 16.0
+                                } else {
+                                    (ui.available_width() - 48.0).min(720.0)
+                                };
                                 ui.set_max_width(max_width);
 
                                 let (think, main_content) = Self::split_think_content(&msg.content);
@@ -1542,29 +1650,35 @@ impl App {
                                         }
                                     }
                                 }
-
-                                ui.add_space(6.0);
-                                let conv_id = conv.id.clone();
-                                ui.horizontal(|ui| {
-                                    if ui.small_button("📋").clicked() {
-                                        self.pending_copy = Some(msg.content.clone());
-                                    }
-                                    if msg.role == "assistant" && conv.kind == ConversationKind::Chat {
-                                        if ui.small_button("🔄").clicked() {
-                                            self.pending_message_action = Some(MessageAction::Regenerate {
-                                                conv_id: conv_id.clone(),
-                                                idx: msg_idx,
-                                            });
-                                        }
-                                    }
-                                    if ui.small_button("🗑").clicked() {
-                                        self.pending_message_action = Some(MessageAction::Delete {
-                                            conv_id: conv_id.clone(),
-                                            idx: msg_idx,
-                                        });
-                                    }
-                                });
                             });
+                    });
+
+                    ui.add_space(4.0);
+                    let btn_align = if is_user {
+                        egui::Layout::right_to_left(egui::Align::TOP)
+                    } else {
+                        egui::Layout::left_to_right(egui::Align::TOP)
+                    };
+                    ui.with_layout(btn_align, |ui| {
+                        ui.horizontal(|ui| {
+                            if ui.small_button("📋").clicked() {
+                                self.pending_copy = Some(msg_content.clone());
+                            }
+                            if msg_role == "assistant" && conv_kind == ConversationKind::Chat {
+                                if ui.small_button("🔄").clicked() {
+                                    self.pending_message_action = Some(MessageAction::Regenerate {
+                                        conv_id: conv_id.clone(),
+                                        idx: msg_idx,
+                                    });
+                                }
+                            }
+                            if ui.small_button("🗑").clicked() {
+                                self.pending_message_action = Some(MessageAction::Delete {
+                                    conv_id: conv_id.clone(),
+                                    idx: msg_idx,
+                                });
+                            }
+                        });
                     });
                     ui.add_space(12.0);
                 }

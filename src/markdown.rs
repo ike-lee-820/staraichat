@@ -305,7 +305,7 @@ fn render_code_block(ui: &mut Ui, code: &str, lang: &str) {
                             ui.add(
                                 egui::Label::new(
                                     RichText::new(display_code)
-                                        .font(FontId::new(16.0, FontFamily::Monospace)),
+                                        .font(FontId::new(18.0, FontFamily::Monospace)),
                                 )
                                 .wrap_mode(TextWrapMode::Extend),
                             );
@@ -314,7 +314,7 @@ fn render_code_block(ui: &mut Ui, code: &str, lang: &str) {
                     let code_width = ui.available_width();
                     ui.add(
                         egui::TextEdit::multiline(&mut display_code.clone())
-                            .font(FontId::new(16.0, FontFamily::Monospace))
+                            .font(FontId::new(18.0, FontFamily::Monospace))
                             .code_editor()
                             .interactive(false)
                             .desired_width(code_width),
@@ -341,7 +341,7 @@ fn render_math_block(ui: &mut Ui, latex: &str) {
                         ui.add(
                             egui::Label::new(
                                 RichText::new(rendered)
-                                    .font(FontId::new(16.0, FontFamily::Monospace)),
+                                    .font(FontId::new(18.0, FontFamily::Monospace)),
                             )
                             .wrap_mode(TextWrapMode::Extend),
                         );
@@ -350,7 +350,7 @@ fn render_math_block(ui: &mut Ui, latex: &str) {
                 let math_width = ui.available_width();
                 ui.add(
                     egui::TextEdit::multiline(&mut rendered.clone())
-                        .font(FontId::new(16.0, FontFamily::Monospace))
+                        .font(FontId::new(18.0, FontFamily::Monospace))
                         .interactive(false)
                         .desired_width(math_width),
                 );

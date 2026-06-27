@@ -6,7 +6,12 @@ edition = "2021"
 [lib]
 crate-type = ["cdylib", "rlib"]
 
+[features]
+default = ["webview"]
+webview = ["dep:wry"]
+
 [dependencies]
+wry = { version = "0.49", optional = true }
 tokio = { version = "1", features = ["full"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
 serde = { version = "1.0", features = ["derive"] }
@@ -25,7 +30,7 @@ eframe = { version = "0.29", features = ["default"] }
 egui = "0.29"
 image = { version = "0.25", features = ["png", "jpeg"] }
 tui-math = "0.1.1"
-pulldown-cmark = { version = "0.12", default-features = false }
+pulldown-cmark = { version = "0.12", default-features = false, features = ["html"] }
 regex = "1"
 once_cell = "1"
 toml = "0.8"
