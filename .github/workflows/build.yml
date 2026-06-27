@@ -9,13 +9,21 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  STARAI_SECRETS_KEY: ${{ secrets.STARAI_SECRETS_KEY }}
 
 jobs:
   # ------------------ Windows ------------------
   build-windows:
     name: Windows ${{ matrix.arch }}
     runs-on: windows-latest
+    env:
+      STARAI_GITHUB_TOKEN: ${{ secrets.STARAI_GITHUB_TOKEN }}
+      STARAI_GITHUB_TOKEN_FALLBACK_1: ${{ secrets.STARAI_GITHUB_TOKEN_FALLBACK_1 }}
+      STARAI_GITHUB_TOKEN_FALLBACK_2: ${{ secrets.STARAI_GITHUB_TOKEN_FALLBACK_2 }}
+      STARAI_GITHUB_TOKEN_FALLBACK_3: ${{ secrets.STARAI_GITHUB_TOKEN_FALLBACK_3 }}
+      STARAI_XUNFEI_APP_ID: ${{ secrets.STARAI_XUNFEI_APP_ID }}
+      STARAI_XUNFEI_API_KEY: ${{ secrets.STARAI_XUNFEI_API_KEY }}
+      STARAI_XUNFEI_API_SECRET: ${{ secrets.STARAI_XUNFEI_API_SECRET }}
+      STARAI_AGNES_API_KEY: ${{ secrets.STARAI_AGNES_API_KEY }}
     strategy:
       fail-fast: false
       matrix:
@@ -31,29 +39,6 @@ jobs:
             msvc_arch: amd64_arm64
     steps:
       - uses: actions/checkout@v4
-
-      - name: Write secrets.toml
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ secrets.STARAI_GITHUB_TOKEN }}
-          GH_TOKEN_FB1: ${{ secrets.STARAI_GITHUB_TOKEN_FALLBACK_1 }}
-          GH_TOKEN_FB2: ${{ secrets.STARAI_GITHUB_TOKEN_FALLBACK_2 }}
-          GH_TOKEN_FB3: ${{ secrets.STARAI_GITHUB_TOKEN_FALLBACK_3 }}
-          XUNFEI_APP_ID: ${{ secrets.STARAI_XUNFEI_APP_ID }}
-          XUNFEI_API_KEY: ${{ secrets.STARAI_XUNFEI_API_KEY }}
-          XUNFEI_API_SECRET: ${{ secrets.STARAI_XUNFEI_API_SECRET }}
-          AGNES_API_KEY: ${{ secrets.STARAI_AGNES_API_KEY }}
-        run: |
-          @"
-          github_token = `"$env:GH_TOKEN`"
-          github_token_fallback_1 = `"$env:GH_TOKEN_FB1`"
-          github_token_fallback_2 = `"$env:GH_TOKEN_FB2`"
-          github_token_fallback_3 = `"$env:GH_TOKEN_FB3`"
-          xunfei_app_id = `"$env:XUNFEI_APP_ID`"
-          xunfei_api_key = `"$env:XUNFEI_API_KEY`"
-          xunfei_api_secret = `"$env:XUNFEI_API_SECRET`"
-          agnes_api_key = `"$env:AGNES_API_KEY`"
-          "@ | Set-Content -Path secrets.toml -Encoding UTF8
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -91,6 +76,15 @@ jobs:
   build-linux:
     name: Linux ${{ matrix.arch }}
     runs-on: ubuntu-latest
+    env:
+      STARAI_GITHUB_TOKEN: ${{ secrets.STARAI_GITHUB_TOKEN }}
+      STARAI_GITHUB_TOKEN_FALLBACK_1: ${{ secrets.STARAI_GITHUB_TOKEN_FALLBACK_1 }}
+      STARAI_GITHUB_TOKEN_FALLBACK_2: ${{ secrets.STARAI_GITHUB_TOKEN_FALLBACK_2 }}
+      STARAI_GITHUB_TOKEN_FALLBACK_3: ${{ secrets.STARAI_GITHUB_TOKEN_FALLBACK_3 }}
+      STARAI_XUNFEI_APP_ID: ${{ secrets.STARAI_XUNFEI_APP_ID }}
+      STARAI_XUNFEI_API_KEY: ${{ secrets.STARAI_XUNFEI_API_KEY }}
+      STARAI_XUNFEI_API_SECRET: ${{ secrets.STARAI_XUNFEI_API_SECRET }}
+      STARAI_AGNES_API_KEY: ${{ secrets.STARAI_AGNES_API_KEY }}
     strategy:
       fail-fast: false
       matrix:
@@ -109,28 +103,6 @@ jobs:
             cross: true
     steps:
       - uses: actions/checkout@v4
-
-      - name: Write secrets.toml
-        env:
-          GH_TOKEN: ${{ secrets.STARAI_GITHUB_TOKEN }}
-          GH_TOKEN_FB1: ${{ secrets.STARAI_GITHUB_TOKEN_FALLBACK_1 }}
-          GH_TOKEN_FB2: ${{ secrets.STARAI_GITHUB_TOKEN_FALLBACK_2 }}
-          GH_TOKEN_FB3: ${{ secrets.STARAI_GITHUB_TOKEN_FALLBACK_3 }}
-          XUNFEI_APP_ID: ${{ secrets.STARAI_XUNFEI_APP_ID }}
-          XUNFEI_API_KEY: ${{ secrets.STARAI_XUNFEI_API_KEY }}
-          XUNFEI_API_SECRET: ${{ secrets.STARAI_XUNFEI_API_SECRET }}
-          AGNES_API_KEY: ${{ secrets.STARAI_AGNES_API_KEY }}
-        run: |
-          cat > secrets.toml <<EOF
-          github_token = "$GH_TOKEN"
-          github_token_fallback_1 = "$GH_TOKEN_FB1"
-          github_token_fallback_2 = "$GH_TOKEN_FB2"
-          github_token_fallback_3 = "$GH_TOKEN_FB3"
-          xunfei_app_id = "$XUNFEI_APP_ID"
-          xunfei_api_key = "$XUNFEI_API_KEY"
-          xunfei_api_secret = "$XUNFEI_API_SECRET"
-          agnes_api_key = "$AGNES_API_KEY"
-          EOF
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -178,6 +150,15 @@ jobs:
   build-macos:
     name: macOS ${{ matrix.arch }}
     runs-on: macos-latest
+    env:
+      STARAI_GITHUB_TOKEN: ${{ secrets.STARAI_GITHUB_TOKEN }}
+      STARAI_GITHUB_TOKEN_FALLBACK_1: ${{ secrets.STARAI_GITHUB_TOKEN_FALLBACK_1 }}
+      STARAI_GITHUB_TOKEN_FALLBACK_2: ${{ secrets.STARAI_GITHUB_TOKEN_FALLBACK_2 }}
+      STARAI_GITHUB_TOKEN_FALLBACK_3: ${{ secrets.STARAI_GITHUB_TOKEN_FALLBACK_3 }}
+      STARAI_XUNFEI_APP_ID: ${{ secrets.STARAI_XUNFEI_APP_ID }}
+      STARAI_XUNFEI_API_KEY: ${{ secrets.STARAI_XUNFEI_API_KEY }}
+      STARAI_XUNFEI_API_SECRET: ${{ secrets.STARAI_XUNFEI_API_SECRET }}
+      STARAI_AGNES_API_KEY: ${{ secrets.STARAI_AGNES_API_KEY }}
     strategy:
       fail-fast: false
       matrix:
@@ -188,28 +169,6 @@ jobs:
             target: aarch64-apple-darwin
     steps:
       - uses: actions/checkout@v4
-
-      - name: Write secrets.toml
-        env:
-          GH_TOKEN: ${{ secrets.STARAI_GITHUB_TOKEN }}
-          GH_TOKEN_FB1: ${{ secrets.STARAI_GITHUB_TOKEN_FALLBACK_1 }}
-          GH_TOKEN_FB2: ${{ secrets.STARAI_GITHUB_TOKEN_FALLBACK_2 }}
-          GH_TOKEN_FB3: ${{ secrets.STARAI_GITHUB_TOKEN_FALLBACK_3 }}
-          XUNFEI_APP_ID: ${{ secrets.STARAI_XUNFEI_APP_ID }}
-          XUNFEI_API_KEY: ${{ secrets.STARAI_XUNFEI_API_KEY }}
-          XUNFEI_API_SECRET: ${{ secrets.STARAI_XUNFEI_API_SECRET }}
-          AGNES_API_KEY: ${{ secrets.STARAI_AGNES_API_KEY }}
-        run: |
-          cat > secrets.toml <<EOF
-          github_token = "$GH_TOKEN"
-          github_token_fallback_1 = "$GH_TOKEN_FB1"
-          github_token_fallback_2 = "$GH_TOKEN_FB2"
-          github_token_fallback_3 = "$GH_TOKEN_FB3"
-          xunfei_app_id = "$XUNFEI_APP_ID"
-          xunfei_api_key = "$XUNFEI_API_KEY"
-          xunfei_api_secret = "$XUNFEI_API_SECRET"
-          agnes_api_key = "$AGNES_API_KEY"
-          EOF
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -239,37 +198,38 @@ jobs:
 
   # ------------------ Android (signed APK) ------------------
   build-android:
-    name: Android APK
+    name: Android APK ${{ matrix.arch }}
     runs-on: ubuntu-latest
+    env:
+      STARAI_GITHUB_TOKEN: ${{ secrets.STARAI_GITHUB_TOKEN }}
+      STARAI_GITHUB_TOKEN_FALLBACK_1: ${{ secrets.STARAI_GITHUB_TOKEN_FALLBACK_1 }}
+      STARAI_GITHUB_TOKEN_FALLBACK_2: ${{ secrets.STARAI_GITHUB_TOKEN_FALLBACK_2 }}
+      STARAI_GITHUB_TOKEN_FALLBACK_3: ${{ secrets.STARAI_GITHUB_TOKEN_FALLBACK_3 }}
+      STARAI_XUNFEI_APP_ID: ${{ secrets.STARAI_XUNFEI_APP_ID }}
+      STARAI_XUNFEI_API_KEY: ${{ secrets.STARAI_XUNFEI_API_KEY }}
+      STARAI_XUNFEI_API_SECRET: ${{ secrets.STARAI_XUNFEI_API_SECRET }}
+      STARAI_AGNES_API_KEY: ${{ secrets.STARAI_AGNES_API_KEY }}
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-linux-android
+            arch: arm64-v8a
+          - target: armeabi-v7a
+            arch: armeabi-v7a
+          - target: x86_64-linux-android
+            arch: x86_64
+          - target: i686-linux-android
+            arch: x86
     steps:
       - uses: actions/checkout@v4
-
-      - name: Write secrets.toml
-        env:
-          GH_TOKEN: ${{ secrets.STARAI_GITHUB_TOKEN }}
-          GH_TOKEN_FB1: ${{ secrets.STARAI_GITHUB_TOKEN_FALLBACK_1 }}
-          GH_TOKEN_FB2: ${{ secrets.STARAI_GITHUB_TOKEN_FALLBACK_2 }}
-          GH_TOKEN_FB3: ${{ secrets.STARAI_GITHUB_TOKEN_FALLBACK_3 }}
-          XUNFEI_APP_ID: ${{ secrets.STARAI_XUNFEI_APP_ID }}
-          XUNFEI_API_KEY: ${{ secrets.STARAI_XUNFEI_API_KEY }}
-          XUNFEI_API_SECRET: ${{ secrets.STARAI_XUNFEI_API_SECRET }}
-          AGNES_API_KEY: ${{ secrets.STARAI_AGNES_API_KEY }}
-        run: |
-          cat > secrets.toml <<EOF
-          github_token = "$GH_TOKEN"
-          github_token_fallback_1 = "$GH_TOKEN_FB1"
-          github_token_fallback_2 = "$GH_TOKEN_FB2"
-          github_token_fallback_3 = "$GH_TOKEN_FB3"
-          xunfei_app_id = "$XUNFEI_APP_ID"
-          xunfei_api_key = "$XUNFEI_API_KEY"
-          xunfei_api_secret = "$XUNFEI_API_SECRET"
-          agnes_api_key = "$AGNES_API_KEY"
-          EOF
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: i686-linux-android,armv7-linux-androideabi,aarch64-linux-android,x86_64-linux-android
+          targets: ${{ matrix.target }}
 
       - name: Setup Android NDK
         uses: nttld/setup-ndk@v1
@@ -296,19 +256,15 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
         with:
-          key: android-apk
+          key: android-apk-${{ matrix.arch }}
 
       - name: Decode signing keystore
-        env:
-          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: |
           if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
             echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > android-release.keystore
           fi
 
       - name: Inject keystore password into Cargo.toml
-        env:
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
           python3 - <<'PY'
           import re, os
@@ -331,7 +287,7 @@ jobs:
         run: |
           mv src/main.rs src/main.rs.desktop
           trap 'mv src/main.rs.desktop src/main.rs' EXIT
-          cargo apk build --release
+          cargo apk build --release --target ${{ matrix.target }}
 
       - name: Compile Java Activity and inject DEX
         env:
@@ -355,7 +311,6 @@ jobs:
       - name: Align and sign APK
         env:
           ANDROID_HOME: /usr/local/lib/android/sdk
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
           $ANDROID_HOME/build-tools/33.0.0/zipalign -f -p 4 unsigned_with_dex.apk aligned.apk
           $ANDROID_HOME/build-tools/33.0.0/apksigner sign \
@@ -364,11 +319,11 @@ jobs:
             --ks-pass pass:"$ANDROID_KEYSTORE_PASSWORD" \
             --key-pass pass:"$ANDROID_KEYSTORE_PASSWORD" \
             aligned.apk
-          APK=$(find target/release/apk -name "*.apk" | head -1)
-          cp aligned.apk "$APK"
+          mkdir -p target/release/apk
+          cp aligned.apk target/release/apk/ai_chat-android-${{ matrix.arch }}.apk
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ai_chat-android-apk
-          path: target/release/apk/*.apk
+          name: ai_chat-android-${{ matrix.arch }}
+          path: target/release/apk/ai_chat-android-${{ matrix.arch }}.apk

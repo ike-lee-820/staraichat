@@ -1,8 +1,7 @@
 use once_cell::sync::Lazy;
-use serde::Deserialize;
 use std::env;
 
-#[derive(Deserialize, Default, Clone)]
+#[derive(Clone, Default)]
 pub struct Secrets {
     pub github_token: String,
     pub github_token_fallback_1: String,
@@ -14,56 +13,20 @@ pub struct Secrets {
     pub agnes_api_key: String,
 }
 
-fn load_decrypted() -> String {
-    static DECRYPTED: Lazy<String> = Lazy::new(|| {
-        let encrypted = include_bytes!("../secrets.enc");
-        if encrypted.is_empty() {
-            return String::new();
-        }
-        if let Ok(key) = env::var("STARAI_SECRETS_KEY") {
-            if let Some(decrypted) = decrypt(encrypted, &key) {
-                return decrypted;
-            }
-        }
-        String::new()
-    });
-    DECRYPTED.clone()
-}
-
 fn secrets() -> Secrets {
-    static SECRETS: Lazy<Secrets> = Lazy::new(|| {
-        let decrypted = load_decrypted();
-        toml::from_str(&decrypted).unwrap_or_default()
+    static SECRETS: Lazy<Secrets> = Lazy::new(|| Secrets {
+        github_token: env::var("STARAI_GITHUB_TOKEN").unwrap_or_default(),
+        github_token_fallback_1: env::var("STARAI_GITHUB_TOKEN_FALLBACK_1").unwrap_or_default(),
+        github_token_fallback_2: env::var("STARAI_GITHUB_TOKEN_FALLBACK_2").unwrap_or_default(),
+        github_token_fallback_3: env::var("STARAI_GITHUB_TOKEN_FALLBACK_3").unwrap_or_default(),
+        xunfei_app_id: env::var("STARAI_XUNFEI_APP_ID").unwrap_or_default(),
+        xunfei_api_key: env::var("STARAI_XUNFEI_API_KEY").unwrap_or_default(),
+        xunfei_api_secret: env::var("STARAI_XUNFEI_API_SECRET").unwrap_or_default(),
+        agnes_api_key: env::var("STARAI_AGNES_API_KEY").unwrap_or_default(),
     });
     SECRETS.clone()
 }
 
-fn decrypt(encrypted: &[u8], password: &str) -> Option<String> {
-    use aes_gcm::{
-        aead::{Aead, KeyInit},
-        Aes256Gcm, Nonce,
-    };
-    use sha2::{Digest, Sha256};
-
-    if encrypted.len() < 12 {
-        return None;
-    }
-    let (nonce_bytes, ciphertext) = encrypted.split_at(12);
-
-    let mut hasher = Sha256::new();
-    hasher.update(password.as_bytes());
-    let key = hasher.finalize();
-
-    let cipher = Aes256Gcm::new_from_slice(&key).ok()?;
-    let nonce = Nonce::from_slice(nonce_bytes);
-
-    cipher
-        .decrypt(nonce, ciphertext)
-        .ok()
-        .and_then(|bytes| String::from_utf8(bytes).ok())
-}
-
-/// 返回主 token 及所有非空备用 token，按主 → 备用1 → 备用2 → 备用3 顺序。
 pub fn github_tokens() -> Vec<String> {
     let s = secrets();
     let mut tokens = Vec::new();

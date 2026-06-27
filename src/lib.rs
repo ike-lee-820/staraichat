@@ -1,5 +1,3 @@
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-
 pub mod config;
 pub mod latex;
 pub mod markdown;

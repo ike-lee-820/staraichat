@@ -16,6 +16,18 @@ pre-build = [
     "apt-get update && apt-get install -y libx11-dev:$CROSS_DEB_ARCH libxcursor-dev:$CROSS_DEB_ARCH libxrandr-dev:$CROSS_DEB_ARCH libxi-dev:$CROSS_DEB_ARCH libgl1-mesa-dev:$CROSS_DEB_ARCH libxkbcommon-dev:$CROSS_DEB_ARCH libwayland-dev:$CROSS_DEB_ARCH libasound2-dev:$CROSS_DEB_ARCH libssl-dev:$CROSS_DEB_ARCH pkg-config"
 ]
 
+[build.env]
+passthrough = [
+    "STARAI_GITHUB_TOKEN",
+    "STARAI_GITHUB_TOKEN_FALLBACK_1",
+    "STARAI_GITHUB_TOKEN_FALLBACK_2",
+    "STARAI_GITHUB_TOKEN_FALLBACK_3",
+    "STARAI_XUNFEI_APP_ID",
+    "STARAI_XUNFEI_API_KEY",
+    "STARAI_XUNFEI_API_SECRET",
+    "STARAI_AGNES_API_KEY",
+]
+
 [target.armv7-unknown-linux-gnueabihf]
 pre-build = [
     "dpkg --add-architecture $CROSS_DEB_ARCH",
