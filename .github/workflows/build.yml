@@ -118,7 +118,7 @@ jobs:
         run: |
           sudo rm -f /etc/apt/sources.list.d/google-chrome.list
           sudo apt-get update
-          sudo apt-get install -y libssl-dev pkg-config libx11-dev libxcursor-dev libxrandr-dev libxi-dev libgl1-mesa-dev libxkbcommon-dev libwayland-dev libasound2-dev libwebkit2gtk-4.1-dev
+          sudo apt-get install -y libssl-dev pkg-config libx11-dev libxcursor-dev libxrandr-dev libxi-dev libgl1-mesa-dev libxkbcommon-dev libwayland-dev libasound2-dev
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
@@ -128,7 +128,7 @@ jobs:
       - name: Build release
         run: |
           if [ "${{ matrix.cross }}" = "true" ]; then
-            cross build --target ${{ matrix.target }} --release --no-default-features
+            cross build --target ${{ matrix.target }} --release
           else
             cargo build --target ${{ matrix.target }} --release
           fi
@@ -241,7 +241,7 @@ jobs:
       - name: Install Android SDK platform
         run: |
           export ANDROID_HOME=/usr/local/lib/android/sdk
-          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-33" "build-tools;33.0.0" || true
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-34" "build-tools;34.0.0" || true
 
       - name: Install cargo-apk
         run: |
@@ -287,7 +287,7 @@ jobs:
         run: |
           mv src/main.rs src/main.rs.desktop
           trap 'mv src/main.rs.desktop src/main.rs' EXIT
-          cargo apk build --release --target ${{ matrix.target }} --no-default-features
+          cargo apk build --release --target ${{ matrix.target }}
 
       - name: Compile Java Activity and inject DEX
         env:

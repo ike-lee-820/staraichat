@@ -84,12 +84,8 @@ fn build_auth_url(_app_id: &str, api_key: &str, api_secret: &str) -> Result<Url>
     Ok(url)
 }
 
-pub async fn request(messages: &[Message]) -> Result<String> {
+fn build_request_body(messages: &[Message]) -> Result<serde_json::Value> {
     let app_id = config::xunfei_app_id();
-    let api_key = config::xunfei_api_key();
-    let api_secret = config::xunfei_api_secret();
-
-    let url = build_auth_url(&app_id, &api_key, &api_secret)?;
 
     // Spark Lite 不支持 system 角色，将 system 消息跳过或合并到 user 中
     let text: Vec<TextItem> = messages
@@ -101,7 +97,7 @@ pub async fn request(messages: &[Message]) -> Result<String> {
         })
         .collect();
 
-    let request_body = json!({
+    Ok(json!({
         "header": {
             "app_id": app_id,
             "uid": "ai_chat_user"
@@ -118,7 +114,16 @@ pub async fn request(messages: &[Message]) -> Result<String> {
                 "text": text
             }
         }
-    });
+    }))
+}
+
+pub async fn request(messages: &[Message]) -> Result<String> {
+    let app_id = config::xunfei_app_id();
+    let api_key = config::xunfei_api_key();
+    let api_secret = config::xunfei_api_secret();
+
+    let url = build_auth_url(&app_id, &api_key, &api_secret)?;
+    let request_body = build_request_body(messages)?;
 
     let (mut ws_stream, _) = tokio_tungstenite::connect_async(url.to_string())
         .await
@@ -168,4 +173,67 @@ pub async fn request(messages: &[Message]) -> Result<String> {
     }
 
     Ok(full_content)
+}
+
+pub async fn request_stream(
+    messages: &[Message],
+    tx: tokio::sync::mpsc::Sender<Result<String>>,
+) -> Result<()> {
+    let app_id = config::xunfei_app_id();
+    let api_key = config::xunfei_api_key();
+    let api_secret = config::xunfei_api_secret();
+
+    let url = build_auth_url(&app_id, &api_key, &api_secret)?;
+    let request_body = build_request_body(messages)?;
+
+    let (mut ws_stream, _) = tokio_tungstenite::connect_async(url.to_string())
+        .await
+        .context("连接讯飞星火 WebSocket 失败")?;
+
+    ws_stream
+        .send(WsMessage::Text(request_body.to_string().into()))
+        .await
+        .context("发送讯飞星火请求失败")?;
+
+    let timeout = tokio::time::Duration::from_secs(120);
+
+    loop {
+        let msg = tokio::time::timeout(timeout, ws_stream.next())
+            .await
+            .context("讯飞星火响应超时")?
+            .context("读取讯飞星火响应失败")??;
+
+        match msg {
+            WsMessage::Text(text) => {
+                let resp: SparkResponse = serde_json::from_str(&text)
+                    .with_context(|| format!("解析讯飞星火响应失败: {}", text))?;
+
+                if resp.header.code != 0 {
+                    bail!(
+                        "讯飞星火返回错误: {} - {}",
+                        resp.header.code,
+                        resp.header.message
+                    );
+                }
+
+                if let Some(payload) = resp.payload {
+                    let status = payload.choices.status;
+                    for item in payload.choices.text {
+                        if item.role == "assistant" && !item.content.is_empty() {
+                            if tx.send(Ok(item.content)).await.is_err() {
+                                return Ok(());
+                            }
+                        }
+                    }
+                    if status == 2 {
+                        break;
+                    }
+                }
+            }
+            WsMessage::Close(_) => break,
+            _ => {}
+        }
+    }
+
+    Ok(())
 }

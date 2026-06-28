@@ -5,6 +5,8 @@ use serde::{Deserialize, Serialize};
 pub enum ConversationKind {
     Chat,
     Image,
+    #[serde(other)]
+    #[allow(dead_code)]
     Video,
 }
 

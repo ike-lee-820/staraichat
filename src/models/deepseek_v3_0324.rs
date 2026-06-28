@@ -1,9 +1,11 @@
 use crate::config;
+use crate::models;
 use crate::types::Message;
 use anyhow::{Context, Result};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use tokio::sync::mpsc::Sender;
 
 const ENDPOINT: &str = "https://models.github.ai/inference";
 const MODEL_NAME: &str = "deepseek/DeepSeek-V3-0324";
@@ -89,4 +91,17 @@ async fn try_request(token: &str, req_messages: &[ReqMessage]) -> Result<String>
         .message
         .content;
     Ok(content)
+}
+
+pub async fn request_stream(messages: &[Message], tx: Sender<Result<String>>) -> Result<()> {
+    let tokens: Vec<String> = config::github_tokens().into_iter().map(|s| s.to_string()).collect();
+    models::stream_openai_compatible(
+        ENDPOINT,
+        MODEL_NAME,
+        messages,
+        tokens,
+        json!({"temperature": 1.0, "top_p": 1.0, "max_tokens": 1000}),
+        tx,
+    )
+    .await
 }

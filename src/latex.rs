@@ -1,10 +1,99 @@
+/// 使用 RaTeX 把 LaTeX 渲染为 PNG 字节。
+/// display 为 true 时使用展示样式，否则使用行内样式。
+pub fn render_formula_png(input: &str, display: bool) -> Option<Vec<u8>> {
+    let input = normalize_unicode_math(input);
+    let nodes = ratex_parser::parse(&input).ok()?;
+
+    use ratex_layout::{layout, to_display_list, LayoutOptions};
+    use ratex_render::{render_to_png, RenderOptions};
+    use ratex_types::color::Color;
+    use ratex_types::math_style::MathStyle;
+
+    let layout_opts = LayoutOptions {
+        style: if display {
+            MathStyle::Display
+        } else {
+            MathStyle::Text
+        },
+        color: Color::BLACK,
+        ..LayoutOptions::default()
+    };
+    let layout_box = layout(&nodes, &layout_opts);
+    let display_list = to_display_list(&layout_box);
+
+    let render_opts = RenderOptions {
+        font_size: if display { 20.0 } else { 16.0 },
+        padding: 4.0,
+        background_color: Color::new(0.0, 0.0, 0.0, 0.0),
+        ..RenderOptions::default()
+    };
+
+    render_to_png(&display_list, &render_opts).ok()
+}
+
 pub fn render_display_latex(input: &str) -> Option<String> {
-    tui_math::render_latex(input).ok()
+    let input = normalize_unicode_math(input);
+    tui_math::render_latex(&input).ok()
+}
+
+/// 把常见的 Unicode 数学符号统一转成 LaTeX 命令，避免发送到渲染服务或
+/// 本地 Unicode 回退时出现乱码/缺字。
+pub fn normalize_unicode_math(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    for c in input.chars() {
+        match c {
+            '≈' => out.push_str("\\approx "),
+            '×' => out.push_str("\\times "),
+            '÷' => out.push_str("\\div "),
+            '≤' => out.push_str("\\leq "),
+            '≥' => out.push_str("\\geq "),
+            '≠' => out.push_str("\\neq "),
+            '∞' => out.push_str("\\infty "),
+            '∈' => out.push_str("\\in "),
+            '∉' => out.push_str("\\notin "),
+            '⊂' => out.push_str("\\subset "),
+            '⊆' => out.push_str("\\subseteq "),
+            '∪' => out.push_str("\\cup "),
+            '∩' => out.push_str("\\cap "),
+            '∅' => out.push_str("\\emptyset "),
+            '∀' => out.push_str("\\forall "),
+            '∃' => out.push_str("\\exists "),
+            '∂' => out.push_str("\\partial "),
+            '∇' => out.push_str("\\nabla "),
+            '·' => out.push_str("\\cdot "),
+            '…' => out.push_str("\\ldots "),
+            '±' => out.push_str("\\pm "),
+            '∓' => out.push_str("\\mp "),
+            '→' => out.push_str("\\rightarrow "),
+            '←' => out.push_str("\\leftarrow "),
+            '⇒' => out.push_str("\\Rightarrow "),
+            '⇐' => out.push_str("\\Leftarrow "),
+            '↔' => out.push_str("\\leftrightarrow "),
+            '√' => out.push_str("\\sqrt "),
+            'π' => out.push_str("\\pi "),
+            'Σ' => out.push_str("\\Sigma "),
+            'Π' => out.push_str("\\Pi "),
+            'α' => out.push_str("\\alpha "),
+            'β' => out.push_str("\\beta "),
+            'γ' => out.push_str("\\gamma "),
+            'δ' => out.push_str("\\delta "),
+            'θ' => out.push_str("\\theta "),
+            'λ' => out.push_str("\\lambda "),
+            'μ' => out.push_str("\\mu "),
+            'σ' => out.push_str("\\sigma "),
+            'τ' => out.push_str("\\tau "),
+            'φ' => out.push_str("\\phi "),
+            'ω' => out.push_str("\\omega "),
+            _ => out.push(c),
+        }
+    }
+    out
 }
 
 /// 将行内 LaTeX 渲染为紧凑的 Unicode 字符串，避免纵向排列破坏排版。
 /// 遇到无法转换的符号时回退到线性写法（如 `^(...)` / `_(...)`），保证始终有可读输出。
 pub fn render_inline_latex(input: &str) -> String {
+    let input = normalize_unicode_math(input);
     let chars: Vec<char> = input.chars().collect();
     let mut result = String::new();
     let mut i = 0;

@@ -6,16 +6,27 @@ use std::path::{Path, PathBuf};
 pub struct Storage {
     dir: PathBuf,
     media_dir: PathBuf,
+    formula_cache_dir: PathBuf,
 }
 
 impl Storage {
     pub fn new(dir: impl AsRef<Path>, media_dir: impl AsRef<Path>) -> Result<Self> {
         let dir = dir.as_ref().to_path_buf();
         let media_dir = media_dir.as_ref().to_path_buf();
+        let formula_cache_dir = dir
+            .parent()
+            .map(|p| p.join("formula_cache"))
+            .unwrap_or_else(|| dir.join("formula_cache"));
         fs::create_dir_all(&dir).with_context(|| format!("无法创建存储目录: {}", dir.display()))?;
         fs::create_dir_all(&media_dir)
             .with_context(|| format!("无法创建媒体目录: {}", media_dir.display()))?;
-        Ok(Self { dir, media_dir })
+        fs::create_dir_all(&formula_cache_dir)
+            .with_context(|| format!("无法创建公式缓存目录: {}", formula_cache_dir.display()))?;
+        Ok(Self {
+            dir,
+            media_dir,
+            formula_cache_dir,
+        })
     }
 
     pub fn default_dirs() -> Result<(PathBuf, PathBuf)> {
@@ -26,6 +37,12 @@ impl Storage {
 
     pub fn conversation_media_dir(&self, conversation_id: &str) -> PathBuf {
         self.media_dir.join(conversation_id)
+    }
+
+    pub fn formula_cache_path(&self, key: &str) -> PathBuf {
+        use sha2::{Digest, Sha256};
+        let hash = format!("{:x}", Sha256::digest(key.as_bytes()));
+        self.formula_cache_dir.join(format!("{}.png", hash))
     }
 
     pub fn list(&self) -> Result<Vec<Conversation>> {
@@ -39,11 +56,13 @@ impl Storage {
             let entry = entry?;
             let path = entry.path();
             if path.extension().and_then(|s| s.to_str()) == Some("json") {
-                let content = fs::read_to_string(&path)
-                    .with_context(|| format!("无法读取文件: {}", path.display()))?;
-                let conv: Conversation = serde_json::from_str(&content)
-                    .with_context(|| format!("JSON解析失败: {}", path.display()))?;
-                conversations.push(conv);
+                match fs::read_to_string(&path) {
+                    Ok(content) => match serde_json::from_str::<Conversation>(&content) {
+                        Ok(conv) => conversations.push(conv),
+                        Err(e) => eprintln!("跳过损坏的对话文件 {}: {}", path.display(), e),
+                    },
+                    Err(e) => eprintln!("跳过无法读取的对话文件 {}: {}", path.display(), e),
+                }
             }
         }
         conversations.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
