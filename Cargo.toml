@@ -75,3 +75,6 @@ theme = "@android:style/Theme.DeviceDefault.NoActionBar"
 [package.metadata.android.application.activity]
 name = "cc.ccwu.staraichat.StarAIChatActivity"
 exported = true
+
+[patch.crates-io]
+iced_winit = { path = "patches/iced_winit-0.14.0" }
